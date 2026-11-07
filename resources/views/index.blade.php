@@ -15,7 +15,9 @@
                 <div class="card-body">
                     <div>
                         @include('reports.dashboard-capital-note')
-                        <canvas id="accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
+                        <div id="dashboard-capital-chart">
+                            <canvas id="accounts-chart" role="img" aria-label="Чисті активи у євро за останні 30 днів"></canvas>
+                        </div>
                     </div>
                 </div>
                 <div class="d-print-none card-footer text-end">
