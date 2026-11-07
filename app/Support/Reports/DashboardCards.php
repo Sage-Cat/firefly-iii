@@ -145,12 +145,19 @@ final class DashboardCards
             $seen[(string) $leg['id']] = true;
             $sums[$leg['currency']]    = bcadd($sums[$leg['currency']] ?? '0', $leg['amount'], 32);
         }
-        $rows = [];
+        if ([] === $sums) {
+            return [];
+        }
+        $quotes   = ReportingCurrency::quotes();
+        $uahTotal = '0';
         foreach ($sums as $currency => $sum) {
-            $rows[] = self::row('net-worth', $currency, $sum);
+            if (0 === bccomp($sum, '0', 32)) {
+                continue;
+            }
+            $uahTotal = bcadd($uahTotal, bcmul($sum, CurrencyBridge::rate($currency, 'UAH', $quotes), 20), 20);
         }
 
-        return $rows;
+        return [self::row('net-worth', 'EUR', CurrencyBridge::convert($uahTotal, 'UAH', 'EUR', $quotes))];
     }
 
     private static function row(string $kind, string $code, string $amount, string $subtitle = ''): array
