@@ -331,8 +331,12 @@ namespace {
         'The rolling window must retain the actual dates of partial first and last ISO weeks.'
     );
     check(
-        $data['monthlySummary']['totals'] === $data['summary']['totals'] && $data['summary']['totals']['expenses'] === '1500.00',
-        'The monthly table must cover the selected period and exclude internal transfers.'
+        $data['monthlyStart']->format('Y-m-d') === '2026-09-01'
+        && $data['monthlyEnd']->format('Y-m-d') === '2026-11-07'
+        && count($data['monthlySummary']['points']) === 3
+        && $data['monthlySummary']['totals']['expenses'] === '1750.00'
+        && $data['summary']['totals']['expenses'] === '1500.00',
+        'The monthly table must cover the last three calendar months independently, excluding internal transfers.'
     );
     check(
         ReportingCurrency::$quoteCalls === 1
@@ -352,8 +356,10 @@ namespace {
         $custom['start']->format('Y-m-d') === '2026-11-01'
         && $custom['end']->format('Y-m-d') === '2026-11-03'
         && count($custom['summary']['points']) === 3
-        && count($custom['monthlySummary']['points']) === 1,
-        'Explicit dates must override the preset for both chart and monthly table.'
+        && count($custom['monthlySummary']['points']) === 3
+        && $custom['monthlySummary']['totals']['expenses'] === '35.00'
+        && $custom['monthlyStart']->format('Y-m-d') === '2026-09-01',
+        'Explicit dates affect the chart while the monthly table keeps the last three calendar months.'
     );
     check(
         $custom['weeklySummary']['points']
@@ -383,6 +389,12 @@ namespace {
     ] as [$today, $start]) {
         ReportingCurrency::$day = $today;
         $data                   = new ProfitReportController()->index(new ProfitRequest())->data;
+        check(
+            count($data['monthlySummary']['points']) === 3
+            && $data['monthlyStart']->format('Y-m-d') === Carbon::parse($today)->startOfMonth()->subMonthsNoOverflow(2)->format('Y-m-d')
+            && $data['monthlyEnd']->format('Y-m-d') === $today,
+            'The monthly table keeps exactly three calendar months through leap and year boundaries.'
+        );
         check(
             $data['weeklyStart']->format('Y-m-d') === $start
             && $data['weeklyEnd']->format('Y-m-d') === $today

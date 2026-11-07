@@ -36,19 +36,21 @@ namespace FireflyIII\Support\Reports {
             ];
         }
 
-        public static function quotes(): never
+        public static function today(): \Carbon\Carbon
         {
-            throw new \RuntimeException('No rates are allowed.');
+            return \Carbon\Carbon::parse('2026-11-07', 'Europe/Kyiv');
+        }
+
+        public static array $uahQuotes = ['UAH' => '1', 'EUR' => '50', 'USD' => '45', 'CHF' => '52', 'USDT' => '44'];
+
+        public static function quotes(): array
+        {
+            return self::$uahQuotes;
         }
 
         public static function rate(...$arguments): never
         {
             throw new \RuntimeException('No rates are allowed.');
-        }
-
-        public static function today(): \Carbon\Carbon
-        {
-            return \Carbon\Carbon::parse('2026-11-07', 'Europe/Kyiv');
         }
     }
 }
@@ -81,6 +83,8 @@ namespace {
 
     require dirname(__DIR__, 2) . '/vendor/autoload.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ReportingSubscriptions.php';
+    require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
+    require dirname(__DIR__, 2) . '/app/Support/Reports/NetWorthSeries.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/DashboardCards.php';
 
     use Carbon\Carbon;
@@ -329,12 +333,24 @@ namespace {
         'Limits use the requested interval without extending or mutating it.'
     );
     check(
-        $rows['net-worth-in-USD']['monetary_value'] === '168.00',
-        'Net worth uses all original signed ledger legs including openings and internal movements.'
+        $rows['net-worth-in-EUR']['monetary_value'] === '205.44',
+        'All signed net-worth balances use the NBU UAH bridge and one final EUR rounding, including liabilities and the stored token valuation.'
     );
-    check($rows['net-worth-in-EUR']['monetary_value'] === '-146.00', 'Negative liability amounts are never inverted or replaced by virtual balances.');
-    check($rows['net-worth-in-UAH']['monetary_value'] === '9563.00', 'Excluded net-worth accounts and foreign owners do not enter capital.');
-    check($rows['net-worth-in-CHF']['monetary_value'] === '5.25', 'Future account opening does not enter an earlier capital value.');
+    check(
+        array_keys(array_filter($rows, static fn($row) => str_starts_with($row['key'], 'net-worth-in-'))) === ['net-worth-in-EUR'],
+        'Net worth emits one combined EUR value, while the other cards retain their source currencies.'
+    );
+    $series = \FireflyIII\Support\Reports\NetWorthSeries::build(
+        DashboardLedger::$fixture['accounts'],
+        DashboardLedger::$fixture['legs'],
+        \FireflyIII\Support\Reports\ReportingCurrency::$uahQuotes,
+        $end->format('Y-m-d'),
+        $end->format('Y-m-d')
+    );
+    check(
+        $series['points'][0]['total'] === $rows['net-worth-in-EUR']['monetary_value'],
+        'The card and chart agree for matching dates and the same NBU snapshot.'
+    );
     check(
         $before === serialize([DashboardLedger::$fixture, $bills->rows, $budgets->rows, $limits->rows]),
         'Original ledger, bill prices and editable limits remain unchanged.'
@@ -373,5 +389,25 @@ namespace {
         $overspent['left-to-spend-in-USD']['monetary_value'] === '-10.00' && $overspent['left-per-day-to-spend-in-USD']['monetary_value'] === '0.00',
         'An overspent cap keeps a negative remainder and zero daily allowance.'
     );
-    echo "Passed {$checks} original-currency dashboard card checks.\n";
+    $quotes = \FireflyIII\Support\Reports\ReportingCurrency::$uahQuotes;
+    unset(\FireflyIII\Support\Reports\ReportingCurrency::$uahQuotes['CHF']);
+    try {
+        DashboardCards::rows($bills, $start, $end);
+        throw new RuntimeException('Missing NBU rate was accepted.');
+    } catch (RuntimeException $exception) {
+        check(str_contains($exception->getMessage(), 'CHF'), 'A missing rate must not produce a partial net-worth total.');
+    }
+    \FireflyIII\Support\Reports\ReportingCurrency::$uahQuotes = $quotes;
+    DashboardLedger::$fixture                                 = [
+        'accounts' => ['a' => account('a', 'UAH'), 'b' => account('b', 'UAH')],
+        'legs'     => [
+            leg('first-cent', 'a', 'UAH', '0.25', 'Opening balance'),
+            leg('second-cent', 'b', 'UAH', '0.25', 'Opening balance')
+        ]
+    ];
+    check(
+        DashboardCards::rows($bills, $start, $end)['net-worth-in-EUR']['monetary_value'] === '0.01',
+        'Sub-cent account values are combined before rounding the portfolio.'
+    );
+    echo "Passed {$checks} dashboard card checks.\n";
 }
