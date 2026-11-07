@@ -31,6 +31,24 @@ support planning only. NBU reporting targets are UAH and EUR; supported fiat
 sources are UAH, EUR, USD, and CHF. Token valuations require explicit dated
 rates rather than an assumed currency peg.
 
+## Balance valuation history
+
+`capital_history.py plan` reads private Sheets values/formulas plus account
+bindings and verified native-coverage dates from `.state/capital-history`.
+It ignores dynamic date formulas, keeps the last snapshot per day, and
+preserves valuation currencies. `apply` stores versioned history in existing
+account notes, without changing openings, transactions, income or expenses.
+Existing notes are backed up by the operator and preserved outside the
+history block; repeated application is idempotent. The shared bank lock
+serializes cooperating imports.
+
+Applying requires this fork's `If-Match-Notes` API support. It checks owner
+and hash while holding the existing note-row lock, returns 409 on conflicts,
+and accepts notes-only updates. Missing or duplicate note rows fail closed.
+The conditional path writes only the Note, suppressing account-update
+financial hooks. Ordinary account API requests retain upstream behavior.
+Keep bindings, source rows, coverage evidence and backup plans private.
+
 ## Tests and scheduling
 
 Run the offline synthetic suite:

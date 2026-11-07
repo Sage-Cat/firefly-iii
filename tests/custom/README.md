@@ -38,12 +38,18 @@ previous two months; the weekly table covers a rolling three-month window.
 Both remain independent of chart dates and stack in the right-hand column.
 Original journal amounts and stored currency fields remain authoritative.
 The dashboard net worth endpoint is selected with `net_worth_eur=1`.
+Use `capital_period=30d`, `3m` or `1y` for its independent history range.
+Validated account-note snapshots fill earlier history in their original
+valuation currency. Known subsequent movements apply until verified native
+coverage starts; thereafter the original ledger wins. Incomplete totals
+are labelled separately, and no income or expense entries are generated.
 
 Build the frontend with the root lockfile and the v3 workspace:
 
 ```sh
 npm ci
 npm run build --workspace=resources/assets/v3
+node tests/custom/dashboard_history_url.mjs
 ```
 
 Generated `public/build` files remain ignored by Git.
