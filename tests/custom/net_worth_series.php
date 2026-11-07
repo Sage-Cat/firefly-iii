@@ -98,4 +98,33 @@ fails(static fn() => NetWorthSeries::build($accounts, $legs, [], '2026-10-09', '
 fails(static fn() => NetWorthSeries::build($accounts, $legs, $quotes, '2026-02-30', '2026-11-07'));
 fails(static fn() => NetWorthSeries::build($accounts, $legs, $quotes, '2026-11-08', '2026-11-07'));
 fails(static fn() => NetWorthSeries::build($accounts, [leg('1', 'a', '2026-10-09', 'UAH', 'NaN')], $quotes, '2026-10-09', '2026-10-09'));
+$history                       = ['asset' => asset('asset', 'USD', '2026-11-06')];
+$history['asset']['snapshots'] = [
+    ['day' => '2026-01-01', 'currency' => 'EUR', 'amount' => '1000'],
+    ['day' => '2026-02-01', 'currency' => 'USD', 'amount' => '1130'],
+    ['day' => '2026-11-07', 'currency' => 'USD', 'amount' => '99999']
+];
+$legs   = [leg('opening', 'asset', '2026-11-06', 'USD', '1200'), leg('payment', 'asset', '2026-11-07', 'USD', '-100')];
+$before = serialize([$history, $legs]);
+$r      = NetWorthSeries::build($history, $legs, $quotes, '2026-01-01', '2026-01-02');
+ensure(array_column($r['points'], 'total') === ['1000.00', '1000.00']);
+$r = NetWorthSeries::build($history, $legs, $quotes, '2026-02-01', '2026-02-02');
+ensure(array_column($r['points'], 'total') === ['1017.00', '1017.00']);
+$r = NetWorthSeries::build($history, $legs, $quotes, '2026-11-05', '2026-11-07');
+ensure(array_column($r['points'], 'total') === ['1017.00', '1080.00', '990.00']);
+ensure($r['coverage_start'] === '2026-11-05');
+ensure(serialize([$history, $legs]) === $before);
+$history['unknown'] = asset('unknown', 'CHF', '2026-11-06');
+$r                  = NetWorthSeries::build($history, $legs, $quotes, '2026-11-05', '2026-11-07');
+ensure($r['points'][0]['total'] === null && $r['points'][0]['known_total'] === '1017.00' && $r['points'][0]['unknown_accounts'] === 1);
+ensure($r['coverage_start'] === '2026-11-06');
+$history['unknown']['known_from'] = '2026-10-06';
+$r                                = NetWorthSeries::build($history, $legs, $quotes, '2026-11-05', '2026-11-07');
+ensure($r['points'][0]['total'] === '1017.00');
+$transfer           = leg('known-transfer', 'asset', '2026-11-05', 'USD', '-10');
+$transfer['type']   = 'Transfer';
+$oldOpening         = leg('old-baseline', 'asset', '2026-09-01', 'USD', '20000');
+$oldOpening['type'] = 'Opening balance';
+$r                  = NetWorthSeries::build($history, [...$legs, $transfer, $oldOpening], $quotes, '2026-11-05', '2026-11-07');
+ensure($r['points'][0]['total'] === '1008.00');
 echo 'Passed ' . $checks . " daily net-worth checks.\n";
