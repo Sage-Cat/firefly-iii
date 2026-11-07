@@ -1,0 +1,15 @@
+[Unit]
+Description=Synchronize PrivatBank FOP statements into local Firefly III
+After=network-online.target firefly-nbu-rates.service
+Requires=firefly-nbu-rates.service
+Wants=network-online.target
+ConditionPathExists=%h/firefly-iii/contrib/ukrainian-banks/.state/privat-fop-token
+ConditionPathExists=%h/firefly-iii/contrib/ukrainian-banks/.state/api-token
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/firefly-iii/contrib/ukrainian-banks
+ExecStart=/usr/bin/python3 %h/firefly-iii/contrib/ukrainian-banks/privat_fop_import.py sync
+UMask=0077
+NoNewPrivileges=true
+TimeoutStartSec=30min

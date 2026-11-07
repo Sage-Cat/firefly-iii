@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly monobank synchronization
+
+[Timer]
+OnCalendar=*-*-* *:00:00 Europe/Kyiv
+Persistent=true
+Unit=firefly-monobank-sync.service
+
+[Install]
+WantedBy=timers.target

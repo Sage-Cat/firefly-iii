@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh budget metadata and period limits hourly
+
+[Timer]
+OnCalendar=*-*-* *:30:00 Europe/Kyiv
+Persistent=true
+Unit=firefly-budget-sync.service
+
+[Install]
+WantedBy=timers.target

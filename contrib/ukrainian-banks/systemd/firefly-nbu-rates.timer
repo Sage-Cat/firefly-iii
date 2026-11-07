@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh dated NBU rates hourly
+
+[Timer]
+OnCalendar=*-*-* *:45:00 Europe/Kyiv
+Persistent=true
+Unit=firefly-nbu-rates.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh PrivatBank FOP transactions hourly
+
+[Timer]
+OnCalendar=*-*-* *:15:00 Europe/Kyiv
+Persistent=true
+Unit=firefly-privat-fop-sync.service
+
+[Install]
+WantedBy=timers.target
