@@ -22,6 +22,19 @@
     <a href="https://docs.firefly-iii.org/explanation/more-information/donations/#donations">🙏 Donate</a>
   </p>
 
+## UAH and EUR reporting
+
+This fork adds a Ukrainian finance reporting profile while retaining the upstream application:
+
+- NBU exchange rates and report-day conversion through UAH, with final-sum rounding.
+- Original-currency dashboard cards and a daily EUR net-worth history that leaves unknown history as gaps.
+- Consolidated UAH/EUR profit charts, monthly income and expense totals, and rolling weekly spending summaries.
+- UAH expense and budget views with simplified navigation.
+
+Optional [Ukrainian bank import tools](contrib/ukrainian-banks/README.md) run separately from the application.
+The [reporting checks](tests/custom/README.md) describe the synthetic test suite and frontend build.
+Credentials, account bindings, statements, and runtime configuration are supplied privately by each installation.
+
 ## Welcome to Firefly III 🥳
 
 "Firefly III" is a (self-hosted) manager for your personal finances. It can help you keep track of your expenses and income, so you can spend less and save more. Firefly III supports the use of budgets, categories and tags. Using a bunch of tools, you can import data. It also has many neat financial reports available.
