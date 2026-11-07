@@ -9,6 +9,19 @@ for file in tests/custom/*.php; do php "$file" || exit; done
 node tests/custom/dashboard_boxes.mjs
 ```
 
+After installing the npm dependencies, check the responsive chart with Node 24+
+and Google Chrome:
+
+```sh
+node tests/custom/dashboard_layout.cjs
+```
+
+This uses the dashboard Blade markup and installed Chart.js in a fresh headless
+browser with synthetic data. It checks stable height through desktop, tablet,
+mobile and high-DPI resizing. Screenshots and measurements go to the ignored
+`storage/framework/testing/chart-layout` directory; no Firefly login is needed.
+Use `--chrome /path/to/chrome` for another Chrome installation.
+
 The checks cover reporting request boundaries, dated conversion, expense
 and budget presentation, profit periods, per-currency dashboard cards, and
 daily net worth valuation. The dashboard JavaScript check executes the
