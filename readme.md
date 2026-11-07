@@ -27,8 +27,8 @@
 This fork adds a Ukrainian finance reporting profile while retaining the upstream application:
 
 - NBU exchange rates and report-day conversion through UAH, with final-sum rounding.
-- Original-currency dashboard cards and a daily EUR net-worth history that leaves unknown history as gaps.
-- Consolidated UAH/EUR profit charts, monthly income and expense totals, and rolling weekly spending summaries.
+- A combined EUR net-worth card and daily history, with original currencies retained in the other dashboard cards.
+- Consolidated UAH/EUR profit charts with independent three-month monthly and weekly tables in a right-hand column.
 - UAH expense and budget views with simplified navigation.
 
 Optional [Ukrainian bank import tools](contrib/ukrainian-banks/README.md) run separately from the application.

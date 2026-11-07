@@ -29,8 +29,13 @@ native source module without network or DOM access. PHP fixtures replace
 selected collaborators and do not require a database or user state.
 
 The reporting profile presents expenses and budgets in UAH, profit in the
-selected UAH or EUR currency, daily net worth in EUR, and dashboard cards in
-their original currencies.
+selected UAH or EUR currency, and the net-worth card and daily history in EUR.
+The other dashboard cards retain their original currencies. Net worth uses
+the report-day NBU UAH bridge and rounds the combined portfolio once; tokens
+without an NBU quote retain the stored manual valuation.
+The monthly table covers the current calendar month through today and the
+previous two months; the weekly table covers a rolling three-month window.
+Both remain independent of chart dates and stack in the right-hand column.
 Original journal amounts and stored currency fields remain authoritative.
 The dashboard net worth endpoint is selected with `net_worth_eur=1`.
 
