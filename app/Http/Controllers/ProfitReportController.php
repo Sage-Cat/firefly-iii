@@ -25,13 +25,15 @@ final class ProfitReportController extends Controller
             'start'    => 'nullable|required_with:end|date_format:Y-m-d|before_or_equal:end',
             'end'      => 'nullable|required_with:start|date_format:Y-m-d|before_or_equal:' . $today->format('Y-m-d')
         ]);
-        $currency    = $input['currency'] ?? 'UAH';
-        $months      = (int) ($input['months'] ?? 1);
-        $period      = ProfitSummary::period($today->format('Y-m-d'), $months);
-        $end         = Carbon::createFromFormat('!Y-m-d', $input['end'] ?? $period['end'], 'Europe/Kyiv');
-        $start       = Carbon::createFromFormat('!Y-m-d', $input['start'] ?? $period['start'], 'Europe/Kyiv');
-        $weeklyStart = $today->copy()->subMonthsNoOverflow(3)->addDay();
-        $weeklyEnd   = $today->copy();
+        $currency     = $input['currency'] ?? 'UAH';
+        $months       = (int) ($input['months'] ?? 1);
+        $period       = ProfitSummary::period($today->format('Y-m-d'), $months);
+        $end          = Carbon::createFromFormat('!Y-m-d', $input['end'] ?? $period['end'], 'Europe/Kyiv');
+        $start        = Carbon::createFromFormat('!Y-m-d', $input['start'] ?? $period['start'], 'Europe/Kyiv');
+        $monthlyStart = $today->copy()->startOfMonth()->subMonthsNoOverflow(2);
+        $monthlyEnd   = $today->copy();
+        $weeklyStart  = $today->copy()->subMonthsNoOverflow(3)->addDay();
+        $weeklyEnd    = $today->copy();
         abort_if($start->diffInDays($end, true) > 3660, 422, 'Оберіть коротший період.');
         $user       = auth()->user();
         $repository = app(AccountRepositoryInterface::class);
@@ -69,8 +71,16 @@ final class ProfitReportController extends Controller
         try {
             $quotes         = ReportingCurrency::quotes();
             $summary        = ProfitSummary::build($journals, $quotes, $assetIds, $start->format('Y-m-d'), $end->format('Y-m-d'), $currency);
-            $monthlySummary = ProfitSummary::build($journals, $quotes, $assetIds, $start->format('Y-m-d'), $end->format('Y-m-d'), $currency, 'monthly');
-            $weeklySummary  = ProfitSummary::build(
+            $monthlySummary = ProfitSummary::build(
+                $journals,
+                $quotes,
+                $assetIds,
+                $monthlyStart->format('Y-m-d'),
+                $monthlyEnd->format('Y-m-d'),
+                $currency,
+                'monthly'
+            );
+            $weeklySummary = ProfitSummary::build(
                 $journals,
                 $quotes,
                 $assetIds,
@@ -79,7 +89,11 @@ final class ProfitReportController extends Controller
                 $currency,
                 'weekly'
             );
-            $manualCurrencies = array_values(array_unique([...$summary['manual_currencies'], ...$weeklySummary['manual_currencies']]));
+            $manualCurrencies = array_values(array_unique([
+                ...$summary['manual_currencies'],
+                ...$monthlySummary['manual_currencies'],
+                ...$weeklySummary['manual_currencies']
+            ]));
         } catch (RuntimeException $exception) {
             $error   = $exception->getMessage();
             $summary = $monthlySummary = $weeklySummary = null;
@@ -99,6 +113,8 @@ final class ProfitReportController extends Controller
             'firstDay'         => $firstDay,
             'monthlySummary'   => $monthlySummary,
             'weeklySummary'    => $weeklySummary,
+            'monthlyStart'     => $monthlyStart,
+            'monthlyEnd'       => $monthlyEnd,
             'weeklyStart'      => $weeklyStart,
             'weeklyEnd'        => $weeklyEnd,
             'manualCurrencies' => $manualCurrencies,

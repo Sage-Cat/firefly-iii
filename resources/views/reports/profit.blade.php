@@ -82,7 +82,7 @@
                     <div class="card-header"><h3 class="card-title">Підсумки за місяцями · {{ $currency }}</h3></div>
                     <div class="table-responsive">
                         <table id="profit-breakdown" class="table table-striped mb-0 caption-top">
-                            <caption class="px-3">Вибраний період: {{ $start->format('d.m.Y') }}–{{ $end->format('d.m.Y') }}. Часткові місяці враховано лише в цих межах.</caption>
+                            <caption class="px-3">Останні 3 календарні місяці: {{ $monthlyStart->format('d.m.Y') }}–{{ $monthlyEnd->format('d.m.Y') }}, незалежно від періоду графіка. Поточний місяць враховано до сьогодні.</caption>
                             <thead><tr><th>Місяць</th><th class="text-end">Доходи</th><th class="text-end">Витрати</th><th class="text-end">Чистий прибуток</th></tr></thead>
                             <tbody>
                             @foreach($monthlySummary['points'] as $point)
