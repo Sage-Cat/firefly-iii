@@ -926,6 +926,9 @@ Route::group(
     }
 );
 
+Route::get('reports/profit', [\FireflyIII\Http\Controllers\ProfitReportController::class, 'index'])
+    ->middleware('user-full-auth')->name('reports.profit');
+
 // Report Controller.
 Route::group(
     ['middleware' => 'user-full-auth', 'namespace' => 'FireflyIII\Http\Controllers', 'prefix' => 'reports', 'as' => 'reports.'],

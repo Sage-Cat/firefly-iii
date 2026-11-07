@@ -1,5 +1,8 @@
 {{-- deposit --}}
-@if('Deposit' === $type)
+@if('Withdrawal' === $type && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest())
+    @php $expense = \FireflyIII\Support\Reports\ExpenseProjection::amount($amount); @endphp
+    @include('reports.expense-amount', ['expense' => $expense])
+@elseif('Deposit' === $type)
     {{-- amount of deposit --}}
     {!! format_amount_by_symbol($amount['amount']*-1, $amount['currency_symbol'], $amount['currency_decimal_places']) !!}
     {{-- foreign amount of deposit --}}

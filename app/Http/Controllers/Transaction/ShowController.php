@@ -195,6 +195,10 @@ final class ShowController extends Controller
 
     private function getAmounts(array $group): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest() && 'Withdrawal' === ($group['transactions'][0]['transaction_type_type'] ?? null)) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::detailAmounts($group);
+        }
+
         $amounts = [];
         foreach ($group['transactions'] as $transaction) {
             // add normal amount:

@@ -45,7 +45,7 @@
                             </template>
                             <th data-sort-column="account_number_and_iban" data-filter-column="account_number_and_iban"><span class="title">{{ trans('form.account_number') }}</span></th>
                             <template x-if="'liabilities' !== objectType">
-                                <th data-sort-column="current_balance"><span class="title">{{ trans('list.currentBalance') }}</span></th>
+                                <th @if('expense' !== $objectType) data-sort-column="current_balance" @endif><span class="title">{{ trans('list.currentBalance') }}</span></th>
                             </template>
                             <template x-if="'liabilities' === objectType">
                                 <th data-sort-column="debt_amount">
@@ -59,7 +59,7 @@
                                 <th data-sort-column="last_activity" class="d-lg-table-cell d-none"><span class="title">{{ trans('list.lastActivity') }}</span></th>
                             </template>
                             {{-- hide on SM --}}
-                            <th data-sort-column="balance_difference" class="w-15 text-end d-lg-table-cell d-none"><span class="title">{{ trans('list.balanceDiff') }}</span></th>
+                            <th @if('expense' !== $objectType) data-sort-column="balance_difference" @endif class="w-15 text-end d-lg-table-cell d-none"><span class="title">{{ trans('list.balanceDiff') }}</span></th>
                             <th>&nbsp;</th>
                         </tr>
                         <tr x-show="true === sortableTable.loadingNewSort">
@@ -125,6 +125,9 @@
                                 </td>
                                 <template x-if="'liabilities' !== objectType">
                                     <td class="text-end">
+                                    @if('expense' === $objectType)
+                                        @include('reports.expense-account-amount', ['expenseField' => 'current_balance'])
+                                    @else
                                         <template x-if="!convertToPrimary || account.primary_currency_id === account.currency_id">
                                             <span>
                                                 <template x-if="0.0 === account.current_balance_float">
@@ -160,7 +163,8 @@
                                                     </template>
                                             </span>
                                         </template>
-                                    </td>
+                                                                        @endif
+</td>
                                 </template>
                                 <template x-if="'liabilities' === objectType">
                                     <td class="text-end">
@@ -220,6 +224,9 @@
                                     </td>
                                 </template>
                                 <td class="text-end">
+                                    @if('expense' === $objectType)
+                                        @include('reports.expense-account-amount', ['expenseField' => 'balance_difference'])
+                                    @else
                                     <template x-if="!convertToPrimary || account.primary_currency_id === account.currency_id">
                                             <span>
                                                 <template x-if="0.0 === account.balance_difference_float">
@@ -255,7 +262,8 @@
                                                     </template>
                                             </span>
                                     </template>
-                                </td>
+                                                                    @endif
+</td>
                                 <td class="justify-content-end">
                                     <div class="dropdown">
                                         <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
@@ -423,5 +431,8 @@
     </div>
 @endsection
 @section('scripts')
+    @if('expense' === $objectType && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest())
+        @include('reports.expense-accounts-store')
+    @endif
     @vite(['js/pages/accounts/index.js'])
 @endsection

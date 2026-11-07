@@ -86,6 +86,13 @@ final class AccountController extends Controller
      */
     public function expenseAccounts(): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $start = clone session('start', today(config('app.timezone'))->startOfMonth());
+            $end = clone session('end', today(config('app.timezone'))->endOfMonth());
+            $accounts = $this->accountRepository->getAccountsByType([AccountTypeEnum::EXPENSE->value]);
+            return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::accountChart($start->startOfDay(), $end->endOfDay(), $accounts)));
+        }
+
         Log::debug('ExpenseAccounts');
 
         /** @var Carbon $start */
@@ -297,6 +304,10 @@ final class AccountController extends Controller
      */
     public function expenseCategory(Account $account, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json($this->generator->multiCurrencyPieChart(\FireflyIII\Support\Reports\ExpenseProjection::assetCategoryPie($account, $start, $end)));
+        }
+
         $cache     = new CacheProperties();
         $cache->addProperty($account->id);
         $cache->addProperty($start);

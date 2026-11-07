@@ -68,6 +68,10 @@
             </td>
             <td colspan="1" class="text-end">
                 {{-- Total amount of all journals in the group. --}}
+                @if('Withdrawal' === $group['transaction_type'] && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest())
+                    @php $expenseTotal = \FireflyIII\Support\Reports\ExpenseProjection::groupAmount($group); @endphp
+                    {!! format_amount_by_symbol($expenseTotal['amount'], $expenseTotal['currency_symbol'], $expenseTotal['currency_decimal_places']) !!}
+                @else
                 @foreach($group['sums'] as $sum)
                     @if('Deposit' === $group['transaction_type'])
                         {!! format_amount_by_symbol($sum['amount']*-1, $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
@@ -85,6 +89,7 @@
                             (~ {!! format_amount_by_symbol($sum['pc_amount'], $primaryCurrency->symbol, $primaryCurrency->decimal_places) !!})@endif{{ $loop->index !== count($group['sums'])-1 ? ',' : '' }}
                    @endif
                 @endforeach
+                @endif
             </td>
             <!-- column to span accounts + extra fields -->
             @if($showCategory && $showBudget)

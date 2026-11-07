@@ -59,8 +59,8 @@ final class BudgetController extends Controller
             $this->repository   = app(BudgetRepositoryInterface::class);
             $this->abRepository = app(AvailableBudgetRepositoryInterface::class);
             $this->blRepository = app(BudgetLimitRepositoryInterface::class);
-            $this->repository->cleanupBudgets();
-            $this->abRepository->cleanup();
+            if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) { $this->repository->cleanupBudgets(); }
+            if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) { $this->abRepository->cleanup(); }
 
             return $next($request);
         });
@@ -68,6 +68,10 @@ final class BudgetController extends Controller
 
     public function getBudgetInformation(TransactionCurrency $currency, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::jsonInformation(auth()->user(), $start, $end));
+        }
+
         $budgeted        = $this->blRepository->budgeted($start, $end, $currency);
         $availableBudget = $this->abRepository->getByCurrencyDate($start, $end, $currency);
         $available       = '0';

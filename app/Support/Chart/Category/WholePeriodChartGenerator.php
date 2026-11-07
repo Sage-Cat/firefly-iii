@@ -42,6 +42,10 @@ class WholePeriodChartGenerator
 
     public function generate(Category $category, Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::categoryHistory($category, $start, $end, $this->calculateStep($start, $end));
+        }
+
         $collection        = new Collection()->push($category);
 
         /** @var OperationsRepositoryInterface $opsRepository */

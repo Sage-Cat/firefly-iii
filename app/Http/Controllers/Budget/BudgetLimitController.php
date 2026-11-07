@@ -220,7 +220,7 @@ final class BudgetLimitController extends Controller
             // notes:
             $array['notes']                  = $this->blRepository->getNoteText($limit);
 
-            return response()->json($array);
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::limitResponse(auth()->user(), $limit, $array));
         }
 
         return redirect(route('budgets.index'));
@@ -294,6 +294,6 @@ final class BudgetLimitController extends Controller
             return redirect(route('budgets.index'));
         }
 
-        return response()->json($array);
+        return response()->json(\FireflyIII\Support\Reports\BudgetProjection::limitResponse(auth()->user(), $limit, $array));
     }
 }

@@ -946,7 +946,7 @@ class GroupCollector implements GroupCollectorInterface
             $result['attachment_id']
         );
 
-        return $result;
+        return \FireflyIII\Support\Reports\ReportingCurrency::projectJournal($result);
     }
 
     private function parseSums(array $groups): array

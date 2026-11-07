@@ -77,6 +77,9 @@ final class AccountController extends Controller
      */
     public function overview(ChartRequest $request): JsonResponse
     {
+        if ($request->boolean('net_worth_eur')) {
+            return response()->json(\FireflyIII\Support\Reports\DashboardCapital::api());
+        }
         $queryParameters = $request->getParameters();
         $accounts        = $this->getAccountListForGroup($queryParameters);
 

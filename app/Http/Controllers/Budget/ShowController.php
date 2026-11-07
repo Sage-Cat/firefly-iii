@@ -168,7 +168,7 @@ final class ShowController extends Controller
         $page        = (int) $request->input('page');
         $page        = clamp($page, 1, 2 ** 16);
         $pageSize    = (int) Preferences::get('listPageSize', 50)->data;
-        $limits      = $this->getLimits($budget, $allStart, $allEnd);
+        $limits      = \FireflyIII\Support\Reports\BudgetProjection::limitsForBudget(auth()->user(), $budget, $allStart, $allEnd);
         $repetition  = null;
         $attachments = $this->repository->getAttachments($budget);
 
@@ -190,6 +190,8 @@ final class ShowController extends Controller
         $subTitle    = (string) trans('firefly.all_journals_for_budget', ['name' => $budget->name]);
 
         return view('budgets.show', [
+            'displayCurrency' => \FireflyIII\Support\Reports\ReportingCurrency::currency('UAH'),
+            'convertToPrimary' => false,
             'limits'      => $limits,
             'attachments' => $attachments,
             'budget'      => $budget,
@@ -223,7 +225,7 @@ final class ShowController extends Controller
             'name'     => $budget->name,
             'start'    => $budgetLimit->start_date->isoFormat($this->monthAndDayFormat),
             'end'      => $budgetLimit->end_date->isoFormat($this->monthAndDayFormat),
-            'currency' => $budgetLimit->transactionCurrency->name,
+            'currency' => \FireflyIII\Support\Reports\ReportingCurrency::currency('UAH')->name,
         ]);
         if ($this->convertToPrimary) {
             $currencySymbol = $this->primaryCurrency->symbol;
@@ -249,16 +251,18 @@ final class ShowController extends Controller
         $start          = session('first', today(config('app.timezone'))->startOfYear());
         $end            = today(config('app.timezone'));
         $attachments    = $this->repository->getAttachments($budget);
-        $limits         = $this->getLimits($budget, $start, $end);
+        $limits         = \FireflyIII\Support\Reports\BudgetProjection::limitsForBudget(auth()->user(), $budget, $start, $end);
 
         return view('budgets.show', [
+            'displayCurrency' => \FireflyIII\Support\Reports\ReportingCurrency::currency('UAH'),
+            'convertToPrimary' => false,
             'limits'         => $limits,
             'attachments'    => $attachments,
             'budget'         => $budget,
             'budgetLimit'    => $budgetLimit,
             'groups'         => $groups,
             'subTitle'       => $subTitle,
-            'currencySymbol' => $currencySymbol,
+            'currencySymbol' => '₴',
         ]);
     }
 }

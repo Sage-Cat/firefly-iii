@@ -1,5 +1,6 @@
 @extends('layout.v3.session')
 @section('content')
+    @include('reports.profit-entry')
     <div class="row">
             <div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">
                 <form class="nodisablebutton" id="report-form" action="{{ route('reports.index.post') }}" method="post">

@@ -60,6 +60,10 @@ class ExchangeRateConverter
      */
     public function convert(TransactionCurrency $from, TransactionCurrency $to, Carbon $date, string $amount): string
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest() && $this->enabled()) {
+            return \FireflyIII\Support\Reports\ReportingCurrency::convert($amount, $from->code, $to->code);
+        }
+
         if (false === $this->enabled()) {
             Log::debug('ExchangeRateConverter: disabled, return amount as is.');
 
@@ -80,6 +84,10 @@ class ExchangeRateConverter
      */
     public function getCurrencyRate(TransactionCurrency $from, TransactionCurrency $to, Carbon $date): string
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest() && $this->enabled()) {
+            return \FireflyIII\Support\Reports\ReportingCurrency::rate($from->code, $to->code);
+        }
+
         if (false === $this->enabled()) {
             // Log::debug('ExchangeRateConverter: disabled, return "1".');
 

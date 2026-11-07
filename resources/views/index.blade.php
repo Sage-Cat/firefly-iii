@@ -9,12 +9,12 @@
             <!--ACCOUNTS -->
             <div class="card mb-2 card-outline">
                 <div class="card-header">
-                    <div class="card-title"><a href="{{ route('accounts.index',['asset']) }}"
-                                               title="{{ __('firefly.yourAccounts') }}">{{ __('firefly.yourAccounts') }}</a>
+                    <div class="card-title">Чисті активи · EUR
                     </div>
                 </div>
                 <div class="card-body">
                     <div>
+                        @include('reports.dashboard-capital-note')
                         <canvas id="accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
                     </div>
                 </div>

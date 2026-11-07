@@ -12,7 +12,10 @@
     @endif
 @endif
 
-@if(\FireflyIII\Enums\TransactionTypeEnum::WITHDRAWAL->value === $transaction['transaction_type_type'])
+@if(\FireflyIII\Enums\TransactionTypeEnum::WITHDRAWAL->value === $transaction['transaction_type_type'] && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest())
+    @php $expense = \FireflyIII\Support\Reports\ExpenseProjection::amount($transaction); @endphp
+    @include('reports.expense-amount', ['expense' => $expense])
+@elseif(\FireflyIII\Enums\TransactionTypeEnum::WITHDRAWAL->value === $transaction['transaction_type_type'])
     {!! format_amount_by_symbol($transaction['amount'], $transaction['currency_symbol'], $transaction['currency_decimal_places']) !!}
     @if(null !== $transaction['foreign_amount'])
         ({!! format_amount_by_symbol($transaction['foreign_amount'], $transaction['foreign_currency_symbol'], $transaction['foreign_currency_decimal_places']) !!})

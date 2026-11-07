@@ -79,7 +79,7 @@ final class IndexController extends Controller
             $this->abRepository       = app(AvailableBudgetRepositoryInterface::class);
             $this->currencyRepository = app(CurrencyRepositoryInterface::class);
             $this->blRepository       = app(BudgetLimitRepositoryInterface::class);
-            $this->repository->cleanupBudgets();
+            if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) { $this->repository->cleanupBudgets(); }
 
             return $next($request);
         });
@@ -94,7 +94,9 @@ final class IndexController extends Controller
      *                                              */
     public function index(?Carbon $start = null, ?Carbon $end = null): Factory|\Illuminate\Contracts\View\View
     {
-        $this->abRepository->cleanup();
+        if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $this->abRepository->cleanup();
+        }
         Log::debug(sprintf('Start of IndexController::index("%s", "%s")', $start?->format('Y-m-d'), $end?->format('Y-m-d')));
 
         // collect some basic vars:
@@ -132,7 +134,17 @@ final class IndexController extends Controller
         // get all inactive budgets, and simply list them:
         $inactive         = $this->repository->getInactiveBudgets();
 
+        $budgetDisplay = \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest();
+        if ($budgetDisplay) {
+            $projection = \FireflyIII\Support\Reports\BudgetProjection::index(auth()->user(), $budgets, $availableBudgets, $start, $end);
+            $budgets = $projection['budgets'];
+            $availableBudgets = $projection['available'];
+            $spent = $projection['spent'];
+            $budgeted = $projection['budgeted'];
+        }
         return view('budgets.index', [
+            'primaryCurrency' => $budgetDisplay ? \FireflyIII\Support\Reports\ReportingCurrency::currency('UAH') : $this->primaryCurrency,
+            'convertToPrimary' => $budgetDisplay ? false : $this->convertToPrimary,
             'availableBudgets' => $availableBudgets,
             'budgeted'         => $budgeted,
             'spent'            => $spent,
@@ -152,7 +164,9 @@ final class IndexController extends Controller
 
     public function reorder(Request $request, BudgetRepositoryInterface $repository): JsonResponse
     {
-        $this->abRepository->cleanup();
+        if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $this->abRepository->cleanup();
+        }
         $budgetIds = $request->input('budgetIds');
 
         foreach ($budgetIds as $index => $budgetId) {
@@ -238,6 +252,9 @@ final class IndexController extends Controller
                 $spentAmount                  = $spent[$currency->id]['sum'] ?? '0';
                 $array['budgeted'][]          = [
                     'id'                      => $limit->id,
+                    'projection_currency_code' => $currency->code,
+                    'projection_start' => $limit->start_date->format('Y-m-d'),
+                    'projection_end' => $limit->end_date->format('Y-m-d'),
                     'amount'                  => $amount,
                     'notes'                   => $this->blRepository->getNoteText($limit),
                     'start_date'              => $limit->start_date->isoFormat($this->monthAndDayFormat),

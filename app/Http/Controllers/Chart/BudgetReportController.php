@@ -71,6 +71,10 @@ final class BudgetReportController extends Controller
      */
     public function budgetExpense(Collection $accounts, Collection $budgets, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::pie(auth()->user(), 'budget_name', $budgets->pluck('id')->all(), $start, $end, $this->generator, $accounts));
+        }
+
         $result = [];
         $spent  = $this->opsRepository->listExpenses($start, $end, $accounts, $budgets);
 
@@ -100,6 +104,10 @@ final class BudgetReportController extends Controller
      */
     public function categoryExpense(Collection $accounts, Collection $budgets, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::pie(auth()->user(), 'category_name', $budgets->pluck('id')->all(), $start, $end, $this->generator, $accounts));
+        }
+
         $result = [];
         $spent  = $this->opsRepository->listExpenses($start, $end, $accounts, $budgets);
         // loop expenses.
@@ -130,6 +138,10 @@ final class BudgetReportController extends Controller
      */
     public function destinationAccountExpense(Collection $accounts, Collection $budgets, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::pie(auth()->user(), 'destination_name', $budgets->pluck('id')->all(), $start, $end, $this->generator, $accounts));
+        }
+
         $result = [];
         $spent  = $this->opsRepository->listExpenses($start, $end, $accounts, $budgets);
 
@@ -160,6 +172,10 @@ final class BudgetReportController extends Controller
      */
     public function mainChart(Collection $accounts, Budget $budget, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::history(auth()->user(), $budget, $start, $end, Navigation::preferredRangeFormat($start, $end), $this->generator, $accounts));
+        }
+
         $chartData = [];
         $spent     = $this->opsRepository->listExpenses($start, $end, $accounts, new Collection()->push($budget));
         $format    = Navigation::preferredCarbonLocalizedFormat($start, $end);
@@ -201,6 +217,10 @@ final class BudgetReportController extends Controller
      */
     public function sourceAccountExpense(Collection $accounts, Collection $budgets, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::pie(auth()->user(), 'source_name', $budgets->pluck('id')->all(), $start, $end, $this->generator, $accounts));
+        }
+
         $result = [];
         $spent  = $this->opsRepository->listExpenses($start, $end, $accounts, $budgets);
 

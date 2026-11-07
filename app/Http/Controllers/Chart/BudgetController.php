@@ -83,6 +83,12 @@ final class BudgetController extends Controller
      */
     public function budget(Budget $budget): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $start = $this->repository->firstUseDate($budget) ?? session('start', \FireflyIII\Support\Reports\ReportingCurrency::today());
+            $end = session('end', \FireflyIII\Support\Reports\ReportingCurrency::today());
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::history(auth()->user(), $budget, $start, $end, $this->calculateStep($start, $end), $this->generator));
+        }
+
         /** @var Carbon $start */
         $start          = $this->repository->firstUseDate($budget) ?? session('start', today(config('app.timezone')));
 
@@ -148,6 +154,10 @@ final class BudgetController extends Controller
      */
     public function budgetLimit(Budget $budget, BudgetLimit $budgetLimit): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::limitChart(auth()->user(), $budget, $budgetLimit, $this->generator));
+        }
+
         if ($budgetLimit->budget->id !== $budget->id) {
             throw new FireflyException('This budget limit is not part of this budget.');
         }
@@ -207,6 +217,10 @@ final class BudgetController extends Controller
      */
     public function expenseAsset(Budget $budget, ?BudgetLimit $budgetLimit = null): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::budgetPie(auth()->user(), $budget, $budgetLimit, 'source_name', $this->generator));
+        }
+
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
         $budgetLimitId = $budgetLimit instanceof BudgetLimit ? $budgetLimit->id : 0;
@@ -284,6 +298,10 @@ final class BudgetController extends Controller
      */
     public function expenseCategory(Budget $budget, ?BudgetLimit $budgetLimit = null): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::budgetPie(auth()->user(), $budget, $budgetLimit, 'category_name', $this->generator));
+        }
+
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
         $budgetLimitId = $budgetLimit instanceof BudgetLimit ? $budgetLimit->id : 0;
@@ -367,6 +385,10 @@ final class BudgetController extends Controller
      */
     public function expenseExpense(Budget $budget, ?BudgetLimit $budgetLimit = null): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::budgetPie(auth()->user(), $budget, $budgetLimit, 'destination_name', $this->generator));
+        }
+
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
         $budgetLimitId = $budgetLimit instanceof BudgetLimit ? $budgetLimit->id : 0;
@@ -455,6 +477,12 @@ final class BudgetController extends Controller
      */
     public function frontpage(): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $start = session('start', \FireflyIII\Support\Reports\ReportingCurrency::today()->startOfMonth());
+            $end = session('end', \FireflyIII\Support\Reports\ReportingCurrency::today()->endOfMonth());
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::overview(auth()->user(), $start, $end, $this->generator));
+        }
+
         $start                            = session('start', today(config('app.timezone'))->startOfMonth());
         $end                              = session('end', today(config('app.timezone'))->endOfMonth());
         // chart properties for cache:
@@ -490,6 +518,10 @@ final class BudgetController extends Controller
      */
     public function period(Budget $budget, TransactionCurrency $currency, Collection $accounts, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::history(auth()->user(), $budget, $start, $end, Navigation::preferredRangeFormat($start, $end), $this->generator, $accounts, true));
+        }
+
         // chart properties for cache:
         $cache          = new CacheProperties();
         $cache->addProperty($start);
@@ -564,6 +596,10 @@ final class BudgetController extends Controller
      */
     public function periodNoBudget(TransactionCurrency $currency, Collection $accounts, Carbon $start, Carbon $end): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::noBudgetHistory(auth()->user(), $accounts, $start, $end, $this->generator));
+        }
+
         // chart properties for cache:
         $cache          = new CacheProperties();
         $cache->addProperty($start);

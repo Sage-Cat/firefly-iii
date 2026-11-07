@@ -100,6 +100,7 @@ class CacheProperties
                 $content = sprintf('%s%s', $content, hash('sha256', (string) Carbon::now()->getTimestamp()));
             }
         }
+        $content .= \FireflyIII\Support\Reports\ReportingCurrency::cacheSuffix();
         $this->hash = substr(hash('sha256', $content), 0, 16);
     }
 }

@@ -86,6 +86,10 @@ final class BudgetController extends Controller
      */
     public function overview(DateRangeRequest $request): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::apiOverview($this->user, $request->attributes->get('start'), $request->attributes->get('end'), false));
+        }
+
         /** @var Carbon $start */
         $start   = $request->attributes->get('start');
 
@@ -110,6 +114,10 @@ final class BudgetController extends Controller
      */
     public function overviewWithBudgetLimits(SameDateRangeRequest $request): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::apiOverview($this->user, $request->attributes->get('start'), $request->attributes->get('end'), true));
+        }
+
         /** @var Carbon $start */
         $start   = $request->attributes->get('start');
 

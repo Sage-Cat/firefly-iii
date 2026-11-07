@@ -1,5 +1,6 @@
 @extends('layout.v3.session')
 @section('content')
+    @include('budgets.table-style')
     <!-- date selector -->
     <div class="row">
         <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
@@ -315,57 +316,16 @@
                                                         </ul>
                                                     </div>
                                                 <span class="hidden text-danger budget_warning" data-id="{{ $budget['id'] }}" data-budgetLimit="{{ $budgetLimit['id'] }}"></span>
+                                                @include('budgets.currency-cap')
                                             @endforeach
                                         @endif
                                     </td>
                                     <td class="spent text-end" data-id="{{ $budget['id'] }}">
-                                        {{-- this is spent in budget limits: --}}
-                                        @foreach($budget['budgeted'] as $budgetLimit)
-                                        <span title="{{ __('firefly.spent_this_period') }}">{!! format_amount_by_symbol($budgetLimit['spent'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!}</span>
-                                        @if(0 === $budgetLimit['active_days_passed'])
-                                            <span title="{{ trans('firefly.spent_this_period_per_day', ['days' => 0]) }}">({!! format_amount_by_symbol($budgetLimit['spent'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!})</span>
-                                        @else
-                                            <span title="{{ trans('firefly.spent_this_period_per_day', ['days' => $budgetLimit['active_days_passed']]) }}">({!! format_amount_by_symbol($budgetLimit['spent'] / $budgetLimit['active_days_passed'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!})</span>
-                                        @endif
-                                        <br />
-                                        @endforeach
-
-                                        {{-- this is spent NOT in budget limits: --}}
-                                        @foreach($budget['spent'] as $spent)
-                                        @if(0 !== bccomp('0', $spent['spent_outside']))
-                                            <span title="{{ __('firefly.spent_in_budget_limit_outside_period') }}">{!! format_amount_by_symbol($spent['spent_outside'], $spent['currency_symbol'], $spent['currency_decimal_places']) !!}</span>
-                                        @if(0 === $activeDaysPassed)
-                                            <span title="{{ trans('firefly.spent_in_budget_limit_outside_period_per_day', ['days' => 0]) }}">({!!  format_amount_by_symbol($spent['spent_outside'], $spent['currency_symbol'], $spent['currency_decimal_places'])  !!})</span>
-                                        @else
-                                            <span title="{{ trans('firefly.spent_in_budget_limit_outside_period_per_day', ['days' => $activeDaysPassed]) }}">({!! format_amount_by_symbol($spent['spent_outside'] / $activeDaysPassed, $spent['currency_symbol'], $spent['currency_decimal_places'])  !!})</span>
-                                        @endif
-                                        <br />
-                                        @endif
-                                        @endforeach
-
+                                        @include('budgets.currency-spent')
                                     </td>
                                     {{-- this cell displays the amount left in the budget, per budget limit. --}}
                                     <td data-id="{{ $budget['id'] }}" class="text-end left">
-                                        {{-- The amount left can only be shown for actual budget limits. --}}
-                                        @foreach($budget['budgeted'] as $budgetLimit)
-                                            <span data-currency="{{ $budgetLimit['currency_id'] }}" data-limit="{{ $budgetLimit['id'] }}" data-value="{{ $budgetLimit['left'] }}" class="left_span amount_left">
-                                                {{-- the amount left --}}
-                                                <span title="{{ __('firefly.left_in_budget_limit_overview') }}">{!!  format_amount_by_symbol($budgetLimit['left'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!}</span>
-                                                {{-- if the budget limit is in the past, this is not interesting. --}}
-                                                {{-- if there is nothing left, this is not interesting. --}}
-                                                @if(!$budgetLimit['in_past'] && -1 === bccomp('0', $budgetLimit['left']))
-                                                    @if(0 === $budgetLimit['active_days_left'])
-                                                        <span title="{{ trans('firefly.left_in_budget_limit_per_day', ['days' => 0]) }}">({!! format_amount_by_symbol($budgetLimit['left'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!})
-                                                    @else
-                                                        <span title="{{ trans('firefly.left_in_budget_limit_per_day', ['days' => $budgetLimit['active_days_left']]) }}">({!! format_amount_by_symbol($budgetLimit['left'] / $budgetLimit['active_days_left'], $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!})</span>
-                                                    @endif
-                                                @endif
-                                                {{-- if there is nothing left, just format 0.00 --}}
-                                                @if(!$budgetLimit['in_past'] && -1 !== bccomp('0', $budgetLimit['left']))
-                                                    <span title="{{ trans('firefly.nothing_left_in_budget') }}">({!! format_amount_by_symbol('0', $budgetLimit['currency_symbol'], $budgetLimit['currency_decimal_places'])  !!})</span>
-                                                @endif
-                                            </span><br />
-                                        @endforeach
+                                        @include('budgets.currency-left')
                                     </td>
                                     <td class="text-end">
 

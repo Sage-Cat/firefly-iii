@@ -33,6 +33,10 @@ trait ResolvesJournalAmountAndCurrency
      */
     protected function resolveJournalAmountAndCurrency(array $journal, ?array $currency = null): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::resolve($journal, $currency, $this->primaryCurrency?->code ?? 'EUR');
+        }
+
         $currency ??= $journal;
 
         $currencyId            = (int) ($journal['currency_id'] ?? $currency['currency_id']);

@@ -91,6 +91,10 @@ trait PeriodOverview
      */
     protected function getAccountPeriodOverview(Account $account, Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::modelPeriods($account, $start, $end);
+        }
+
         Log::debug(sprintf('Now in getAccountPeriodOverview(#%d, %s %s)', $account->id, $start->format('Y-m-d H:i:s.u'), $end->format('Y-m-d H:i:s.u')));
         $this->accountRepository   = app(AccountRepositoryInterface::class);
         $this->accountRepository->setUser($account->user);
@@ -120,6 +124,10 @@ trait PeriodOverview
      */
     protected function getCategoryPeriodOverview(Category $category, Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::modelPeriods($category, $start, $end);
+        }
+
         $this->categoryRepository  = app(CategoryRepositoryInterface::class);
         $this->categoryRepository->setUser($category->user);
         $this->periodStatisticRepo = app(PeriodStatisticRepositoryInterface::class);
@@ -179,6 +187,10 @@ trait PeriodOverview
      */
     protected function getNoModelPeriodOverview(string $model, Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::noModelPeriods($model, $start, $end);
+        }
+
         Log::debug(sprintf('Now in getNoModelPeriodOverview(%s, %s %s)', $model, $start->format('Y-m-d'), $end->format('Y-m-d')));
         $this->periodStatisticRepo = app(PeriodStatisticRepositoryInterface::class);
         $range                     = Navigation::getViewRange(true);
@@ -228,7 +240,11 @@ trait PeriodOverview
      * @throws FireflyException
      */
     protected function getTagPeriodOverview(Tag $tag, Carbon $start, Carbon $end): array
-    { // period overview for tags.
+    {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::modelPeriods($tag, $start, $end);
+        }
+ // period overview for tags.
         $this->tagRepository       = app(TagRepositoryInterface::class);
         $this->tagRepository->setUser($tag->user);
         $this->periodStatisticRepo = app(PeriodStatisticRepositoryInterface::class);
@@ -255,6 +271,10 @@ trait PeriodOverview
      */
     protected function getTransactionPeriodOverview(string $transactionType, Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\ExpenseProjection::genericPeriods($transactionType, $start, $end);
+        }
+
         $this->periodStatisticRepo = app(PeriodStatisticRepositoryInterface::class);
         $range                     = Navigation::getViewRange(true);
         [$start, $end]             = $end < $start ? [$end, $start] : [$start, $end];

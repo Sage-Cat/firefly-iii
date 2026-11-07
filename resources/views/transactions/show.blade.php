@@ -293,7 +293,10 @@
                                            title="{{ $journal['source_iban'] ?? $journal['source_account_name'] }}">{{ $journal['source_account_name'] }}</a> &rarr;
                                     @endif
 
-                                    @if($first['transaction_type_type'] === 'Withdrawal')
+                                    @if($first['transaction_type_type'] === 'Withdrawal' && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest())
+                                        @php $expense = \FireflyIII\Support\Reports\ExpenseProjection::amount($journal); @endphp
+                                        @include('reports.expense-amount', ['expense' => $expense])
+                                    @elseif($first['transaction_type_type'] === 'Withdrawal')
                                         {!! format_amount_by_symbol($journal['amount'], $journal['currency_symbol'], $journal['currency_decimal_places'])  !!}
                                     @elseif($first['transaction_type_type'] === 'Deposit')
                                         {!! format_amount_by_symbol($journal['amount']*-1, $journal['currency_symbol'], $journal['currency_decimal_places'])  !!}
@@ -308,7 +311,7 @@
                                     @endif
 
                                     <!-- do primary currency amount, if foreign amount is not the same. -->
-                                    @if(null !== $journal['pc_amount'] && $primaryCurrency->id !== $journal['currency_id'] && $primaryCurrency->id !== $journal['foreign_currency_id'])
+                                    @if(!('Withdrawal' === $first['transaction_type_type'] && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) && null !== $journal['pc_amount'] && $primaryCurrency->id !== $journal['currency_id'] && $primaryCurrency->id !== $journal['foreign_currency_id'])
                                         @if($first['transaction_type_type'] === 'Withdrawal')
                                             (~ {!! format_amount_by_symbol($journal['pc_amount'], $primaryCurrency->symbol, $primaryCurrency->decimal_places) !!})
                                         @elseif($first['transaction_type_type'] === 'Deposit')
@@ -321,7 +324,7 @@
                                     @endif
 
                                     <!-- do foreign amount -->
-                                    @if(null !== $journal['foreign_amount'])
+                                    @if(!('Withdrawal' === $first['transaction_type_type'] && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) && null !== $journal['foreign_amount'])
                                         @if($first['transaction_type_type'] === 'Withdrawal')
                                             ({!! format_amount_by_symbol($journal['foreign_amount'], $journal['foreign_currency_symbol'], $journal['foreign_currency_decimal_places']) !!})
                                         @elseif($first['transaction_type_type'] === 'Deposit')
@@ -334,7 +337,7 @@
                                     @endif
 
                                     <!-- do foreign PC amount -->
-                                    @if(null !== $journal['pc_foreign_amount'])
+                                    @if(!('Withdrawal' === $first['transaction_type_type'] && \FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) && null !== $journal['pc_foreign_amount'])
                                         @if($first['transaction_type_type'] === 'Withdrawal')
                                             ({!! format_amount_by_symbol($journal['pc_foreign_amount'], $primaryCurrency->symbol, $primaryCurrency->decimal_places) !!})
                                         @elseif($first['transaction_type_type'] === 'Deposit')

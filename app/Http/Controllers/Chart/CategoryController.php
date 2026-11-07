@@ -104,6 +104,12 @@ final class CategoryController extends Controller
      */
     public function frontPage(): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $start = clone session('start', today(config('app.timezone'))->startOfMonth());
+            $end = clone session('end', today(config('app.timezone'))->endOfMonth());
+            return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::categoryChart($start, $end)));
+        }
+
         $start                                = session('start', today(config('app.timezone'))->startOfMonth());
         $end                                  = session('end', today(config('app.timezone'))->endOfMonth());
         // chart properties for cache:
@@ -215,6 +221,10 @@ final class CategoryController extends Controller
      */
     private function reportPeriodChart(Collection $accounts, Carbon $start, Carbon $end, ?Category $category): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return $this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::categoryReport($accounts, $start, $end, $category));
+        }
+
         $income     = [];
         $expenses   = [];
         $categoryId = 0;

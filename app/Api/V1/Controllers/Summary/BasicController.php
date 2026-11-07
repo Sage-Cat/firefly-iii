@@ -83,7 +83,7 @@ final class BasicController extends Controller
             $this->accountRepository->setUser($user);
             $this->abRepository->setUser($user);
             $this->opsRepository->setUser($user);
-            $this->abRepository->cleanup();
+            if (!\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) { $this->abRepository->cleanup(); }
 
             return $next($request);
         });
@@ -91,6 +91,8 @@ final class BasicController extends Controller
 
     public function basic(BasicRequest $request): JsonResponse
     {
+        $range = $request->attributes->all();
+        return response()->json(\FireflyIII\Support\Reports\DashboardCards::rows($this->billRepository, $range['start'], $range['end'], $range['code']));
         // parameters for boxes:
         ['start' => $start, 'end' => $end, 'code' => $code] = $request->attributes->all();
         // balance information:
@@ -117,6 +119,8 @@ final class BasicController extends Controller
 
     private function getBalanceInformation(Carbon $start, Carbon $end): array
     {
+        return \FireflyIII\Support\Reports\ReportingCurrency::summaryRows($start, $end);
+
         Log::debug('getBalanceInformation');
         // some config settings
         $convertToPrimary = Amount::convertToPrimary();
@@ -314,6 +318,10 @@ final class BasicController extends Controller
      */
     private function getLeftToSpendInfo(Carbon $start, Carbon $end): array
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            return \FireflyIII\Support\Reports\BudgetProjection::leftToSpend(auth()->user(), $start, $end);
+        }
+
         Log::debug(sprintf('Now in getLeftToSpendInfo("%s", "%s")', $start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')));
         $return     = [];
         $today      = today(config('app.timezone'));
@@ -512,6 +520,8 @@ final class BasicController extends Controller
 
     private function getSubscriptionInformation(Carbon $start, Carbon $end): array
     {
+        return \FireflyIII\Support\Reports\ReportingSubscriptions::rows($this->billRepository, $start, $end);
+
         Log::debug(sprintf('Now in getBillInformation("%s", "%s")', $start->format('Y-m-d'), $end->format('Y-m-d-')));
         /*
          * Since both this method and the chart use the exact same data, we can suffice

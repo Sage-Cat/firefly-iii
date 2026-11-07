@@ -8,7 +8,7 @@
                         <div class="col-9">
                             <h3 class="card-title">
                                 @if(null !== $budgetLimit)
-                                    {{ trans('firefly.chart_budget_in_period', ['name' => $budget->name, 'start' => $budgetLimit->start_date->isoFormat($monthAndDayFormat), 'end' =>  $budgetLimit->end_date->isoFormat($monthAndDayFormat), 'currency' => $budgetLimit->transactionCurrency->name]) }}
+                                    {{ trans('firefly.chart_budget_in_period', ['name' => $budget->name, 'start' => $budgetLimit->start_date->isoFormat($monthAndDayFormat), 'end' =>  $budgetLimit->end_date->isoFormat($monthAndDayFormat), 'currency' => $displayCurrency->name]) }}
                                 @else
                                     {{ trans('firefly.chart_all_journals_for_budget', ['name' => $budget->name]) }}
                                 @endif
@@ -31,7 +31,7 @@
                 @if(null !== $budgetLimit)
                     <div class="card-footer">
                         <p class="text-muted">
-                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $budgetLimit->transactionCurrency->name]) }}
+                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $displayCurrency->name]) }}
                         </p>
                     </div>
                 @endif
@@ -66,7 +66,7 @@
                 @if(null !== ($budgetLimit ?? null))
                     <div class="card-footer">
                         <p class="text-muted">
-                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $budgetLimit->transactionCurrency->name]) }}
+                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $displayCurrency->name]) }}
                         </p>
                     </div>
                 @endif
@@ -85,7 +85,7 @@
                 @if(null !== ($budgetLimit ?? null))
                     <div class="card-footer">
                         <p class="text-muted">
-                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $budgetLimit->transactionCurrency->name]) }}
+                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $displayCurrency->name]) }}
                         </p>
                     </div>
                 @endif
@@ -104,7 +104,7 @@
                 @if(null !== ($budgetLimit ?? null))
                     <div class="card-footer">
                         <p class="text-muted">
-                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $budgetLimit->transactionCurrency->name]) }}
+                            {{ trans('firefly.chart_budget_in_period_only_currency', ['currency' => $displayCurrency->name]) }}
                         </p>
                     </div>
                 @endif
@@ -153,7 +153,7 @@
                                 <tr>
                                     <td class="third">{{ __('firefly.amount') }}</td>
                                     <td>
-                                        {!! format_amount_by_symbol($limit->amount, $limit->transactionCurrency->symbol, $limit->transactionCurrency->decimal_places) !!}
+                                        {!! format_amount_by_symbol($limit->display_amount, $displayCurrency->symbol, $displayCurrency->decimal_places) !!}
                                         @if($convertToPrimary && null !== $limit->native_amount)
                                             ({!! format_amount_by_symbol($limit->native_amount, $primaryCurrency->symbol, $primaryCurrency->decimal_places) !!})
                                         @endif
@@ -163,25 +163,25 @@
                                     <td class="third">{{ __('firefly.spent') }}</td>
                                     <td>
                                         @if($convertToPrimary)
-                                            {!! format_amount_by_symbol($limit->spent, $limit->transactionCurrency->symbol, $limit->transactionCurrency->decimal_places) !!}
+                                            {!! format_amount_by_symbol($limit->display_spent, $displayCurrency->symbol, $displayCurrency->decimal_places) !!}
                                             @if($limit->pc_spent)
                                                 ({!! format_amount_by_symbol($limit->pc_spent, $primaryCurrency->symbol, $primaryCurrency->decimal_places) !!})
                                             @endif
                                         @else
-                                            {!! format_amount_by_symbol($limit->spent, $limit->transactionCurrency->symbol, $limit->transactionCurrency->decimal_places) !!}
+                                            {!! format_amount_by_symbol($limit->display_spent, $displayCurrency->symbol, $displayCurrency->decimal_places) !!}
                                         @endif
                                     </td>
                                 </tr>
-                                @if(0 !==  bccomp('0', $limit->spent))
+                                @if(0 !==  bccomp('0', $limit->display_spent))
                                     <tr>
                                         <td colspan="2">
                                             @php
-                                                $overspent = $limit->amount + $limit->spent < 0;
+                                                $overspent = $limit->display_amount + $limit->display_spent < 0;
                                             @endphp
                                             @if($overspent)
                                                 @php
                                                     // must have -1 here
-                                                    $pct = ($limit->spent != 0 ? ($limit->amount / ($limit->spent*-1))*100 : 0);
+                                                    $pct = ($limit->display_spent != 0 ? ($limit->display_amount / ($limit->display_spent*-1))*100 : 0);
                                                 @endphp
                                                 <div class="progress-stacked">
                                                 <div style="height:21px;" class="progress w-{{ round($pct) }}" role="progressbar" aria-valuenow="{{ round($pct) }}" aria-valuemin="0" aria-valuemax="100">
@@ -194,7 +194,7 @@
                                             @else
                                                 @php
                                                 // must have -1 here
-                                                $pct = ($limit->amount != 0 ? ((($limit->spent*-1) / $limit->amount)*100) : 0);
+                                                $pct = ($limit->display_amount != 0 ? ((($limit->display_spent*-1) / $limit->display_amount)*100) : 0);
                                                 @endphp
                                                 <div class="progress" role="progressbar" aria-valuenow="{{ round($pct) }}" aria-valuemin="0" aria-valuemax="100">
                                                     <div class="progress-bar bg-success progress-bar-striped w-{{ round($pct) }}"></div>

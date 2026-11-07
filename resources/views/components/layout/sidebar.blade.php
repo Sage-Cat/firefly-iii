@@ -204,17 +204,12 @@
 
 
     <li class="nav-header text-uppercase">{{ __('firefly.others') }}</li>
-    <li class="nav-item">
-        <a href="{{ route('currencies.index') }}" class="nav-link {{ menu_item_active_partial('currencies.') }}">
-            <em class="nav-icon bi bi-currency-euro"></em>
-            <p>{{ __('firefly.currencies') }}</p>
-        </a>
-    </li>
+
     @if(true === $featuringCer)
     <li class="nav-item">
         <a href="{{ route('exchange-rates.index') }}" class="nav-link {{ menu_item_active_partial('exchange-rates.') }}">
             <em class="nav-icon bi bi-currency-exchange"></em>
-            <p>{{ __('firefly.menu_exchange_rates_index') }}</p>
+            <p>Курси НБУ</p>
         </a>
     </li>
     @endif
@@ -222,16 +217,12 @@
         <li class="nav-item">
             <span class="nav-link {{ menu_item_active_partial('exchange-rates.') }}">
                 <em class="nav-icon bi bi-currency-exchange"></em>
-                <p>{{ __('firefly.menu_exchange_rates_index') }} ({{ trans('firefly.cer_menu_disabled') }})</p>
+                <p>Курси НБУ ({{ trans('firefly.cer_menu_disabled') }})</p>
             </span>
         </li>
     @endif
-    <li class="nav-item">
-        <a href="{{ route('reports.index') }}" class="nav-link {{ menu_item_active_partial('reports.') }}">
-            <em class="nav-icon bi bi-bar-chart"></em>
-            <p>{{ __('firefly.reports') }}</p>
-        </a>
-    </li>
+
+    @include('reports.profit-sidebar')
     <li class="nav-item">
         <a href="{{ route('export.index') }}" class="nav-link {{ menu_item_active_partial('export.') }}">
             <em class="nav-icon bi bi-upload"></em>

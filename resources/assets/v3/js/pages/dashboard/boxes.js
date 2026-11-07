@@ -26,6 +26,30 @@ import { cleanupCache } from "../../support/cleanup-cache.js";
 import formatDate from "../../util/format-date.js";
 
 let afterPromises = false;
+let dashboardCurrencyDecimals = {};
+
+function dashboardMoney(amount, currencyCode) {
+    if (
+        typeof currencyCode === "string" &&
+        currencyCode.length > 3 &&
+        currencyCode.length <= 12 &&
+        (typeof amount === "number" || typeof amount === "string") &&
+        Number.isFinite(Number(amount))
+    ) {
+        const places = dashboardCurrencyDecimals[currencyCode];
+        const digits = Number.isInteger(places) && places >= 0 && places <= 12 ? places : 8;
+        return (
+            new Intl.NumberFormat(window.__localeId__.replace("_", "-"), {
+                minimumFractionDigits: Math.min(2, digits),
+                maximumFractionDigits: digits,
+            }).format(Number(amount)) +
+            " " +
+            currencyCode
+        );
+    }
+    return formatMoney(amount, currencyCode);
+}
+
 export default () => ({
     balanceBox: { amounts: [], subtitles: [] },
     billBox: { paid: [], unpaid: [] },
@@ -83,12 +107,17 @@ export default () => ({
             });
     },
     generateOptions(data) {
+        dashboardCurrencyDecimals = {};
+        Object.values(data || {}).forEach((row) => {
+            if (row && typeof row.currency_code === "string" && Number.isInteger(row.currency_decimal_places)) {
+                dashboardCurrencyDecimals[row.currency_code] = row.currency_decimal_places;
+            }
+        });
         this.balanceBox = { amounts: [], subtitles: [] };
         this.billBox = { paid: [], unpaid: [] };
         this.leftBox = { left: [], perDay: [] };
         this.netBox = { net: [] };
         let subtitles = {};
-        let sumMoneyLeft = 0;
         // process new content:
         for (const i in data) {
             if (Object.hasOwn(data, i)) {
@@ -99,7 +128,7 @@ export default () => ({
                 let key = current.key;
                 if (key.startsWith("balance-in-")) {
                     this.balanceBox.amounts.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                     continue;
                 }
@@ -112,7 +141,7 @@ export default () => ({
                     // append the amount spent.
                     subtitles[current.currency_code] =
                         subtitles[current.currency_code] +
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code);
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code);
                     continue;
                 }
                 // earned info is used in subtitle:
@@ -123,7 +152,7 @@ export default () => ({
                     }
                     // prepend the amount earned.
                     subtitles[current.currency_code] =
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code) +
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code) +
                         " + " +
                         subtitles[current.currency_code];
                     continue;
@@ -131,38 +160,43 @@ export default () => ({
 
                 if (key.startsWith("bills-unpaid-in-")) {
                     this.billBox.unpaid.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                     continue;
                 }
                 if (key.startsWith("bills-paid-in-")) {
                     this.billBox.paid.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                     continue;
                 }
                 if (key.startsWith("left-to-spend-in-")) {
-                    sumMoneyLeft = sumMoneyLeft + parseFloat(current.monetary_value);
                     this.leftBox.left.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                     continue;
                 }
                 if (key.startsWith("left-per-day-to-spend-in-")) {
                     this.leftBox.perDay.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                     continue;
                 }
                 if (key.startsWith("net-worth-in-")) {
                     this.netBox.net.push(
-                        formatMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
+                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
                     );
                 }
             }
         }
 
-        this.noMoneyLeft = sumMoneyLeft <= 0;
+        this.noMoneyLeft = !Object.values(data || {}).some(
+            (row) =>
+                row &&
+                typeof row.key === "string" &&
+                row.key.startsWith("left-to-spend-in-") &&
+                Number(row.monetary_value) > 0,
+        );
         this.noMoneyLeft = this.anonymous ? true : this.noMoneyLeft;
         for (let i in subtitles) {
             if (Object.hasOwn(subtitles, i)) {
