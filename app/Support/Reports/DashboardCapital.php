@@ -8,7 +8,7 @@ use Carbon\Carbon;
 
 final class DashboardCapital
 {
-    /** Native dashboard chart API shape: one EUR series, including unknown-day gaps. */
+    /** Complete and explicitly incomplete EUR history share one chart. */
     public static function api(): array
     {
         $result = self::data();
@@ -22,32 +22,46 @@ final class DashboardCapital
                 $row[$prefix . 'currency_' . $field] = 'id' === $field ? (string) $currency->{$field} : $currency->{$field};
             }
         }
+        $partial          = $row;
+        $partial['label'] = 'Відома частина капіталу · неповні дані';
+        $hasPartial       = false;
         foreach ($result['points'] as $point) {
-            $day                  = Carbon::parse($point['day'], 'Europe/Kyiv')->setTime(12, 0)->toIso8601String();
-            $row['entries'][$day] = $point['total'];
+            $day                      = Carbon::parse($point['day'], 'Europe/Kyiv')->setTime(12, 0)->toIso8601String();
+            $row['entries'][$day]     = $point['total'];
+            $partial['entries'][$day] = null === $point['total'] ? $point['known_total'] : null;
+            $hasPartial               = $hasPartial || null !== $partial['entries'][$day];
         }
-        $row['pc_entries'] = $row['entries'];
+        $row['pc_entries']     = $row['entries'];
+        $partial['pc_entries'] = $partial['entries'];
 
-        return [$row];
+        return $hasPartial ? [$row, $partial] : [$row];
     }
 
     public static function data(): array
     {
-        $key = 'dashboard-capital';
+        $period = request()->query('capital_period', '30d');
+        $period = in_array($period, ['30d', '3m', '1y'], true) ? $period : '30d';
+        $key    = 'dashboard-capital:' . $period;
         if (request()->attributes->has($key)) {
             return request()->attributes->get($key);
         }
         $end   = ReportingCurrency::today();
-        $start = $end->copy()->subDays(29);
+        $start = match ($period) {
+            '3m'    => $end->copy()->subMonthsNoOverflow(3)->addDay(),
+            '1y'    => $end->copy()->subYearNoOverflow()->addDay(),
+            default => $end->copy()->subDays(29)
+        };
         try {
             $ledger = DashboardLedger::data();
-
             $result = NetWorthSeries::build($ledger['accounts'], $ledger['legs'], ReportingCurrency::quotes(), $start->format('Y-m-d'), $end->format('Y-m-d'));
 
             $result['error'] = null;
         } catch (\RuntimeException $exception) {
             $result = ['error' => $exception->getMessage(), 'points' => [], 'coverage_start' => null];
         }
+        $result['period'] = $period;
+        $result['start']  = $start->format('Y-m-d');
+        $result['end']    = $end->format('Y-m-d');
         request()->attributes->set($key, $result);
 
         return $result;

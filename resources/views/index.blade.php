@@ -16,7 +16,7 @@
                     <div>
                         @include('reports.dashboard-capital-note')
                         <div id="dashboard-capital-chart">
-                            <canvas id="accounts-chart" role="img" aria-label="Чисті активи у євро за останні 30 днів"></canvas>
+                            <canvas id="accounts-chart" role="img" aria-label="Історія чистих активів у євро"></canvas>
                         </div>
                     </div>
                 </div>

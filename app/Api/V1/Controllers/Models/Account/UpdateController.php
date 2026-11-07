@@ -67,9 +67,49 @@ final class UpdateController extends Controller
      */
     public function update(UpdateRequest $request, Account $account): JsonResponse
     {
+        if ($request->headers->has('If-Match-Notes')) {
+            $expected = $request->header('If-Match-Notes');
+            if (!is_string($expected) || 1 !== preg_match('/^[0-9a-f]{64}$/D', $expected)) {
+                return response()->json(['message' => 'Invalid account notes hash.'], 422);
+            }
+            if ((string) $account->user_group_id !== (string) auth()->user()->user_group_id) {
+                return response()->json(['message' => 'Account not found.'], 404);
+            }
+            $request->headers->remove('If-Match-Notes');
+
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $account, $expected): JsonResponse {
+                $notes = $account->notes()->lockForUpdate()->get();
+                if (1 !== $notes->count()) {
+                    return response()->json(['message' => 'Conditional notes update requires one existing note.'], 409);
+                }
+                $current = (string) ($notes->first()->text ?? '');
+                if (!hash_equals($expected, hash('sha256', $current))) {
+                    return response()->json(['message' => 'Account notes changed since they were read.'], 409);
+                }
+
+                $data = $request->getUpdateData();
+                if (array_keys($request->all()) !== ['notes'] || !array_key_exists('notes', $data)) {
+                    return response()->json(['message' => 'Conditional notes updates accept only notes.'], 422);
+                }
+                $note = $notes->first();
+                $text = trim((string) $data['notes']);
+                if ('' === $text) {
+                    $note->delete();
+                } else {
+                    $note->text = $text;
+                    $note->save();
+                }
+
+                return response()->json(['data' => ['type' => 'accounts', 'id' => (string) $account->id, 'attributes' => ['notes' => $text]]])->header(
+                    'Content-Type',
+                    self::CONTENT_TYPE
+                );
+            });
+        }
+
         Log::debug(sprintf('Now in %s', __METHOD__));
         $data         = $request->getUpdateData();
-        $data['type'] = config('firefly.shortNamesByFullName.'.$account->accountType->type);
+        $data['type'] = config('firefly.shortNamesByFullName.' . $account->accountType->type);
         $account      = $this->repository->update($account, $data);
         $manager      = $this->getManager();
         $account->refresh();
@@ -77,15 +117,15 @@ final class UpdateController extends Controller
 
         // enrich
         /** @var User $admin */
-        $admin        = auth()->user();
-        $enrichment   = new AccountEnrichment();
+        $admin      = auth()->user();
+        $enrichment = new AccountEnrichment();
         $enrichment->setDate(null);
         $enrichment->setUser($admin);
-        $account      = $enrichment->enrichSingle($account);
+        $account = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */
-        $transformer  = app(AccountTransformer::class);
-        $resource     = new Item($account, $transformer, self::RESOURCE_KEY);
+        $transformer = app(AccountTransformer::class);
+        $resource    = new Item($account, $transformer, self::RESOURCE_KEY);
 
         return response()->json($manager->createData($resource)->toArray())->header('Content-Type', self::CONTENT_TYPE);
     }

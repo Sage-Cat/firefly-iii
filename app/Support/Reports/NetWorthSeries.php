@@ -17,17 +17,9 @@ final class NetWorthSeries
             throw new RuntimeException('Некоректний період історії капіталу.');
         }
         $owned    = array_filter($accounts, static fn($account) => $account['net_worth']);
-        $coverage = $start;
-        foreach ($owned as $account) {
-            if (null !== $account['known_from']) {
-                self::date($account['known_from']);
-                if ($account['known_from'] <= $end) {
-                    $coverage = max($coverage, $account['known_from']);
-                }
-            }
-        }
-        $events = [];
-        $seen   = [];
+        $coverage = null;
+        $events   = [];
+        $seen     = [];
         foreach ($legs as $leg) {
             if (!isset($owned[(string) $leg['account_id']])) {
                 continue;
@@ -58,28 +50,71 @@ final class NetWorthSeries
                 $code                 = $event['currency'];
                 $balances[$id][$code] = bcadd($balances[$id][$code] ?? '0', $event['amount'], 16);
             }
-            $total = null;
-            if ($key >= $coverage) {
-                $byCurrency = [];
-                foreach ($balances as $currencies) {
-                    foreach ($currencies as $code => $balance) {
-                        $byCurrency[$code] = bcadd($byCurrency[$code] ?? '0', $balance, 20);
-                    }
+            $byCurrency = [];
+            $unknown    = 0;
+            $known      = 0;
+            foreach ($owned as $id => $account) {
+                $nativeFrom = $account['known_from'];
+                if (null !== $nativeFrom) {
+                    self::date($nativeFrom);
                 }
-                $uahTotal = '0';
-                foreach ($byCurrency as $code => $balance) {
-                    if (0 === bccomp($balance, '0', 20)) {
+                if (null === $nativeFrom || $key >= $nativeFrom) {
+                    $currencies = $balances[(string) $id] ?? [];
+                } else {
+                    $snapshot = null;
+                    foreach ($account['snapshots'] ?? [] as $candidate) {
+                        if ($candidate['day'] <= $key && (null === $snapshot || $candidate['day'] > $snapshot['day'])) {
+                            $snapshot = $candidate;
+                        }
+                    }
+                    if (null === $snapshot) {
+                        if ($nativeFrom > $end) {
+                            continue;
+                        }
+                        ++$unknown;
                         continue;
                     }
-                    if (!in_array($code, ['EUR', 'UAH', 'USD', 'CHF'], true)) {
-                        $manual[$code] = true;
+                    $currencies = [$snapshot['currency'] => $snapshot['amount']];
+                    foreach ($events as $event) {
+                        if (
+                            (string) $event['account_id'] !== (string) $id
+                            || $event['day'] <= $snapshot['day']
+                            || $event['day'] > $key
+                            || !in_array($event['type'] ?? '', ['Deposit', 'Withdrawal', 'Transfer'], true)
+                        ) {
+                            continue;
+                        }
+                        $code              = $event['currency'];
+                        $currencies[$code] = bcadd($currencies[$code] ?? '0', $event['amount'], 20);
                     }
-                    $uahTotal = bcadd($uahTotal, bcmul($balance, CurrencyBridge::rate($code, 'UAH', $quotes), 20), 20);
                 }
-                // Round the whole portfolio once, so an own transfer cannot create cents.
-                $total = CurrencyBridge::convert($uahTotal, 'UAH', 'EUR', $quotes);
+                ++$known;
+                foreach ($currencies as $code => $balance) {
+                    $byCurrency[$code] = bcadd($byCurrency[$code] ?? '0', $balance, 20);
+                }
             }
-            $points[] = ['day' => $key, 'total' => $total];
+            $uahTotal = '0';
+            foreach ($byCurrency as $code => $balance) {
+                if (0 === bccomp($balance, '0', 20)) {
+                    continue;
+                }
+                if (!in_array($code, ['EUR', 'UAH', 'USD', 'CHF'], true)) {
+                    $manual[$code] = true;
+                }
+                $uahTotal = bcadd($uahTotal, bcmul($balance, CurrencyBridge::rate($code, 'UAH', $quotes), 20), 20);
+            }
+            // Historical valuations replace, rather than add to, the native ledger.
+            $value    = CurrencyBridge::convert($uahTotal, 'UAH', 'EUR', $quotes);
+            $complete = 0 === $unknown;
+            if ($complete && null === $coverage) {
+                $coverage = $key;
+            }
+            $points[] = [
+                'day'              => $key,
+                'total'            => $complete ? $value : null,
+                'known_total'      => $complete || $known > 0 ? $value : null,
+                'unknown_accounts' => $unknown
+            ];
         }
 
         return [

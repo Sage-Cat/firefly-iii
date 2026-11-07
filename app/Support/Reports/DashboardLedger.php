@@ -26,17 +26,21 @@ final class DashboardLedger
         )));
         $models   = $repository->getAccountsByType($types);
         $accounts = [];
+        $coverage = [];
         foreach ($models as $account) {
             $currency = $repository->getAccountCurrency($account);
             if (null === $currency) {
                 throw new RuntimeException('Не визначено валюту власного рахунку.');
             }
             $flag                            = $repository->getMetaValue($account, 'include_net_worth');
+            $history                         = BalanceHistory::read($repository->getNoteText($account) ?? '');
+            $coverage[(string) $account->id] = $history['ledger_from'];
             $accounts[(string) $account->id] = [
                 'id'         => (string) $account->id,
                 'currency'   => $currency->code,
                 'net_worth'  => null === $flag || '1' === $flag,
-                'known_from' => null
+                'known_from' => null,
+                'snapshots'  => $history['snapshots']
             ];
         }
         $legs  = [];
@@ -73,6 +77,9 @@ final class DashboardLedger
         }
         foreach ($accounts as $id => &$account) {
             $account['known_from'] ??= $first[$id] ?? null;
+            if (null !== $coverage[$id]) {
+                $account['known_from'] = $coverage[$id];
+            }
         }
         unset($account);
         $result = ['accounts' => $accounts, 'legs' => $legs];

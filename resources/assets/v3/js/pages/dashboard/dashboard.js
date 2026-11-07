@@ -117,7 +117,9 @@ let index = function () {
                 this.loadPiggyBanks();
                 drawMultiCurrencyChart(
                     "line",
-                    "api/v1/chart/account/overview?net_worth_eur=1&period=1D&start=" +
+                    "api/v1/chart/account/overview?net_worth_eur=1&capital_period=" +
+                        encodeURIComponent(new URLSearchParams(window.location.search).get("capital_period") || "30d") +
+                        "&period=1D&start=" +
                         formatDate(start, "yyyy-LL-dd") +
                         "&end=" +
                         formatDate(end, "yyyy-LL-dd"),

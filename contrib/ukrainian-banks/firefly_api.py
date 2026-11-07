@@ -1,6 +1,7 @@
 """Client for the local Firefly III instance."""
 
 import json
+import re
 import stat
 import urllib.error
 import urllib.request
@@ -23,7 +24,7 @@ class Client:
             raise ValueError("Invalid API token file")
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def _request(self, method, path, body=None, content_type=None):
+    def _request(self, method, path, body=None, content_type=None, notes_hash=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -31,6 +32,10 @@ class Client:
         headers = {"Authorization": "Bearer " + self._token, "Accept": "application/json"}
         if content_type:
             headers["Content-Type"] = content_type
+        if notes_hash is not None:
+            if not re.fullmatch(r"[0-9a-f]{64}", notes_hash):
+                raise ValueError("Invalid account notes hash")
+            headers["If-Match-Notes"] = notes_hash
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method=method)
         try:
             with self._http.open(request, timeout=30) as response:
@@ -44,9 +49,9 @@ class Client:
                 details = "Unexpected non-JSON response"
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
-    def request(self, method, path, data=None):
+    def request(self, method, path, data=None, *, notes_hash=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
-        result = self._request(method, path, body, "application/json")
+        result = self._request(method, path, body, "application/json", notes_hash=notes_hash)
         return json.loads(result) if result else None
 
     def all(self, path):
