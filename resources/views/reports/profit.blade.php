@@ -75,7 +75,7 @@
                         <div id="profit-chart-wrap"><canvas id="profit-chart" role="img" aria-label="Зведені доходи, витрати й залишок після витрат"></canvas></div>
                     </div>
                 </div>
-                <p class="text-muted small">Курси НБУ станом на {{ $valuationDay->format('d.m.Y') }}. Перерахунок через гривню. Перекази між власними рахунками та початкові залишки виключені. Результат показує рух коштів за вибраний період.</p>
+                <p class="text-muted small">Курси НБУ станом на {{ $valuationDay->format('d.m.Y') }}. Перерахунок через гривню. Перекази між власними рахунками та початкові залишки виключені. Лінія «Результат після витрат» показує накопичені доходи мінус витрати від початку вибраного періоду.</p>
                 @if(count($manualCurrencies) > 0)<p class="text-muted small">Для {{ implode(', ', $manualCurrencies) }} використано збережену ручну оцінку.</p>@endif
             @endif
         </div>
@@ -139,7 +139,7 @@
             new Chart(document.getElementById('profit-chart').getContext('2d'), {
                 type: 'bar',
                 data: {labels: profitLabels, datasets: [
-                    {label: 'Результат після витрат', type: 'line', borderColor: '#38bdf8', backgroundColor: '#38bdf8', fill: false, borderWidth: 3, lineTension: 0, data: profitPoints.map(point => Number(point.net))},
+                    {label: 'Результат після витрат', type: 'line', borderColor: '#38bdf8', backgroundColor: '#38bdf8', fill: false, borderWidth: 3, lineTension: 0, data: profitPoints.map(point => Number(point.cumulative_net))},
                     {label: 'Доходи', backgroundColor: 'rgba(36, 172, 116, 0.75)', data: profitPoints.map(point => Number(point.income)), order: 2},
                     {label: 'Витрати', backgroundColor: 'rgba(226, 93, 102, 0.75)', data: profitPoints.map(point => Number(point.expenses)), order: 2}
                 ]},

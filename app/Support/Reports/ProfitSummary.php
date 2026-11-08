@@ -93,8 +93,11 @@ final class ProfitSummary
             $total[$bucket]        = bcadd($total[$bucket], $amount, 2);
             ++$count;
         }
+        $cumulativeNet = '0.00';
         foreach ($points as &$point) {
-            $point['net'] = bcsub($point['income'], $point['expenses'], 2);
+            $point['net']            = bcsub($point['income'], $point['expenses'], 2);
+            $cumulativeNet           = bcadd($cumulativeNet, $point['net'], 2);
+            $point['cumulative_net'] = $cumulativeNet;
         }
         unset($point);
         $total['net'] = bcsub($total['income'], $total['expenses'], 2);
