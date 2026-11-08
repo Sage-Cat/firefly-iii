@@ -88,7 +88,7 @@ ensure(array_column($cents['points'], 'total') === ['0.01', '0.01']);
 $negative = NetWorthSeries::build(['d' => asset('d', 'USD')], [leg('1', 'd', '2026-10-09', 'USD', '-50')], $quotes, '2026-10-09', '2026-10-09');
 ensure($negative['points'][0]['total'] === '-45.00');
 $crypto = NetWorthSeries::build(['x' => asset('x', 'USDT')], [leg('1', 'x', '2026-10-09', 'USDT', '100')], $quotes, '2026-10-09', '2026-10-09');
-ensure($crypto['points'][0]['total'] === '88.00' && $crypto['manual_currencies'] === ['USDT']);
+ensure($crypto['points'][0]['total'] === '90.00' && $crypto['manual_currencies'] === []);
 $zero = NetWorthSeries::build(['a' => asset('a', 'UAH', null)], [], $quotes, '2026-10-09', '2026-10-10');
 ensure(array_column($zero['points'], 'total') === ['0.00', '0.00']);
 $future = NetWorthSeries::build(['a' => asset('a', 'EUR', '2026-12-01')], [leg('1', 'a', '2026-12-01', 'EUR', '100')], $quotes, '2026-10-09', '2026-10-09');

@@ -333,8 +333,8 @@ namespace {
         'Limits use the requested interval without extending or mutating it.'
     );
     check(
-        $rows['net-worth-in-EUR']['monetary_value'] === '205.44',
-        'All signed net-worth balances use the NBU UAH bridge and one final EUR rounding, including liabilities and the stored token valuation.'
+        $rows['net-worth-in-EUR']['monetary_value'] === '205.52',
+        'All signed net-worth balances use the NBU UAH bridge and one final EUR rounding, including liabilities and the USD-proxy token valuation.'
     );
     check(
         array_keys(array_filter($rows, static fn($row) => str_starts_with($row['key'], 'net-worth-in-'))) === ['net-worth-in-EUR'],

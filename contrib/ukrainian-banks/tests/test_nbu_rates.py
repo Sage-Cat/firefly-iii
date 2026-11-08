@@ -120,15 +120,15 @@ class NbuTests(unittest.TestCase):
         ledger = Ledger(); before = copy.deepcopy((ledger.groups, ledger.accounts))
         with tempfile.TemporaryDirectory() as directory:
             result = synchronize(ledger, Rates(), Path(directory), date(2026, 11, 7))
-            self.assertEqual(21, result["changed_rates"])
-            self.assertEqual(3, result["manual_derived_usdt_uah_rates"])
-            self.assertEqual(["USDT"], result["unsupported_currencies"])
+            self.assertEqual(23, result["changed_rates"])
+            self.assertEqual(6, result["usd_proxy_usdt_rates"])
+            self.assertEqual([], result["unsupported_currencies"])
             self.assertEqual("50.000000000000", ledger.rates["EUR", "UAH"]["2026-11-05"])
             self.assertEqual("52.000000000000", ledger.rates["EUR", "UAH"]["2026-11-07"])
             self.assertEqual("0.900000000000", ledger.rates["USD", "EUR"]["2026-11-05"])
-            self.assertEqual({"2026-11-05": "0.9"}, ledger.rates["USDT", "EUR"])
+            self.assertEqual({d: Decimal(v) for d, v in ledger.rates["USD", "EUR"].items()}, {d: Decimal(v) for d, v in ledger.rates["USDT", "EUR"].items()})
             self.assertEqual("45.000000000000", ledger.rates["USDT", "UAH"]["2026-11-05"])
-            self.assertEqual("46.800000000000", ledger.rates["USDT", "UAH"]["2026-11-07"])
+            self.assertEqual("47.000000000000", ledger.rates["USDT", "UAH"]["2026-11-07"])
             self.assertEqual(before, (ledger.groups, ledger.accounts))
             ledger.calls.clear()
             again = synchronize(ledger, Rates(), Path(directory), date(2026, 11, 7))
@@ -160,21 +160,38 @@ class NbuTests(unittest.TestCase):
             synchronize(ledger, nbu, Path(directory), date(2026, 11, 7))
         self.assertEqual([], ledger.calls)
 
-    def test_manual_valuation_must_cover_usdt_history_without_future_or_pegged_fallback(self):
-        for manual in [{}, {"2026-11-06": "0.9"}]:
-            ledger = Ledger(); ledger.rates["USDT", "EUR"] = manual
-            with tempfile.TemporaryDirectory() as directory, self.assertRaises(Deferred):
+    def test_usdt_uses_usd_without_a_manual_rate_or_an_earlier_manual_anchor(self):
+        for old in [{}, {"2026-11-06": "0.1"}]:
+            ledger = Ledger(); ledger.rates["USDT", "EUR"] = old
+            with tempfile.TemporaryDirectory() as directory:
                 synchronize(ledger, Rates(), Path(directory), date(2026, 11, 7))
-            self.assertEqual([], ledger.calls)
+            self.assertEqual({d: Decimal(v) for d, v in ledger.rates["USD", "EUR"].items()}, {d: Decimal(v) for d, v in ledger.rates["USDT", "EUR"].items()})
+            self.assertEqual(ledger.rates["USD", "UAH"], ledger.rates["USDT", "UAH"])
 
-    def test_later_manual_eur_valuation_does_not_reprice_earlier_usdt_dates(self):
+    def test_old_manual_values_are_replaced_by_dated_usd_proxy(self):
         ledger = Ledger(); ledger.rates["USDT", "EUR"]["2026-11-06"] = "0.8"
         with tempfile.TemporaryDirectory() as directory:
             synchronize(ledger, Rates(), Path(directory), date(2026, 11, 7))
         self.assertEqual("45.000000000000", ledger.rates["USDT", "UAH"]["2026-11-05"])
-        self.assertEqual("40.800000000000", ledger.rates["USDT", "UAH"]["2026-11-06"])
-        self.assertEqual("41.600000000000", ledger.rates["USDT", "UAH"]["2026-11-07"])
-        self.assertEqual({"2026-11-05": "0.9", "2026-11-06": "0.8"}, ledger.rates["USDT", "EUR"])
+        self.assertEqual("46.000000000000", ledger.rates["USDT", "UAH"]["2026-11-06"])
+        self.assertEqual("47.000000000000", ledger.rates["USDT", "UAH"]["2026-11-07"])
+        self.assertEqual({d: Decimal(v) for d, v in ledger.rates["USD", "EUR"].items()}, {d: Decimal(v) for d, v in ledger.rates["USDT", "EUR"].items()})
+
+    def test_usdt_only_account_still_fetches_official_usd_rates(self):
+        ledger = Ledger(); ledger.groups = [journal("usdt", "USDT", kind="opening balance")]
+        ledger.accounts = [a for a in ledger.accounts if a["attributes"]["currency_code"] == "USDT"]
+        with tempfile.TemporaryDirectory() as directory:
+            result = synchronize(ledger, Rates(), Path(directory), date(2026, 11, 7))
+        self.assertEqual([], result["unsupported_currencies"])
+        self.assertEqual(ledger.rates["USD", "UAH"], ledger.rates["USDT", "UAH"])
+
+    def test_large_history_is_written_in_bounded_batches(self):
+        ledger = Ledger()
+        with tempfile.TemporaryDirectory() as directory:
+            synchronize(ledger, Rates(), Path(directory), date(2026, 11, 25))
+        self.assertTrue(ledger.calls)
+        self.assertTrue(all(len(body) <= 10 for _, _, body in ledger.calls))
+        self.assertEqual(21, len(ledger.rates["USDT", "UAH"]))
 
     def test_future_journal_is_not_valued_at_another_date(self):
         ledger = Ledger(); ledger.groups.append(journal("future", "EUR", day="2026-11-08"))

@@ -8,14 +8,18 @@ use FireflyIII\Support\Reports\CurrencyBridge;
 
 $quotes = ['UAH' => '1', 'USD' => '45.50', 'EUR' => '50.00', 'CHF' => '52.10', 'USD/EUR' => '999'];
 $cases  = [
-    ['100',    'USD',     'UAH', '4550.00'],
-    ['4550',   'UAH',     'USD', '100.00'],
-    ['100',    'USD',     'EUR', '91.00'],
-    ['100',    'EUR',     'CHF', '95.97'],
-    ['-100',   'USD',     'EUR', '-91.00'],
-    ['0',      'UNKNOWN', 'EUR', '0.00'],
-    ['12.345', 'EUR',     'EUR', '12.35'],
-    ['10.05',  'USD',     'UAH', '457.28']
+    ['100',    'USD',     'UAH',  '4550.00'],
+    ['100',    'USDT',    'UAH',  '4550.00'],
+    ['100',    'USDT',    'EUR',  '91.00'],
+    ['100',    'USDT',    'USD',  '100.00'],
+    ['100',    'USD',     'USDT', '100.00'],
+    ['4550',   'UAH',     'USD',  '100.00'],
+    ['100',    'USD',     'EUR',  '91.00'],
+    ['100',    'EUR',     'CHF',  '95.97'],
+    ['-100',   'USD',     'EUR',  '-91.00'],
+    ['0',      'UNKNOWN', 'EUR',  '0.00'],
+    ['12.345', 'EUR',     'EUR',  '12.35'],
+    ['10.05',  'USD',     'UAH',  '457.28']
 ];
 foreach ($cases as [$amount, $from, $to, $expected]) {
     if (CurrencyBridge::convert($amount, $from, $to, $quotes) !== $expected) {
@@ -30,6 +34,9 @@ if (CurrencyBridge::convert('-0.01', 'USD', 'EUR', ['USD' => '0.49', 'EUR' => '0
 }
 if (CurrencyBridge::convert('100', 'USD', 'UAH', ['UAH' => '999', 'USD' => '45.5']) !== '4550.00') {
     throw new RuntimeException('UAH must remain the unit of the bridge.');
+}
+if (CurrencyBridge::convert('100', 'USDT', 'EUR', ['USDT' => '999', 'USD' => '45.5', 'EUR' => '50']) !== '91.00') {
+    throw new RuntimeException('Stored token valuations must not override the selected USD proxy.');
 }
 $rejected = 0;
 foreach ([[], ['USD' => '0', 'EUR' => '50'], ['USD' => '-1', 'EUR' => '50'], ['USD' => 'NaN', 'EUR' => '50'], ['USD' => 'Infinity', 'EUR' => '50']] as $bad) {
@@ -87,4 +94,4 @@ foreach (['date', 'missing', 'units', 'negative', 'conditions', 'conflict'] as $
 if (6 !== $failures) {
     throw new RuntimeException('Malformed NBU responses must not become quotes.');
 }
-echo "Passed 23 UAH bridge and NBU quote checks.\n";
+echo "Passed 28 UAH bridge and NBU quote checks.\n";
