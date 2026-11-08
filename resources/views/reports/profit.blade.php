@@ -9,6 +9,9 @@
         #profit-chart-wrap { position: relative; height: 360px; }
         #profit-breakdown th:nth-child(n+2), #profit-breakdown td:nth-child(n+2),
         #profit-weekly-expenses th, #profit-weekly-expenses td { white-space: nowrap; }
+        .profit-income { --bs-table-bg: rgba(var(--bs-success-rgb), 0.06); }
+        .profit-expenses { --bs-table-bg: rgba(var(--bs-danger-rgb), 0.06); }
+        .profit-net { --bs-table-bg: rgba(var(--bs-info-rgb), 0.06); }
     </style>
     <div class="row g-3">
         <div class="col-xl-7">
@@ -83,16 +86,16 @@
                     <div class="table-responsive">
                         <table id="profit-breakdown" class="table table-striped mb-0 caption-top">
                             <caption class="px-3">Останні 3 календарні місяці: {{ $monthlyStart->format('d.m.Y') }}–{{ $monthlyEnd->format('d.m.Y') }}, незалежно від періоду графіка. Поточний місяць враховано до сьогодні.</caption>
-                            <thead><tr><th>Місяць</th><th class="text-end">Доходи</th><th class="text-end">Витрати</th><th class="text-end">Чистий прибуток</th></tr></thead>
+                            <thead><tr><th>Місяць</th><th class="text-end text-success-emphasis profit-income">Доходи</th><th class="text-end text-danger-emphasis profit-expenses">Витрати</th><th class="text-end text-info-emphasis profit-net">Чистий прибуток</th></tr></thead>
                             <tbody>
                             @foreach($monthlySummary['points'] as $point)
                                 <tr>
                                     <td>{{ \Carbon\Carbon::parse($point['period'].'-01')->translatedFormat('F Y') }}<div class="small text-muted">{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</div></td>
-                                    @foreach(['income', 'expenses', 'net'] as $key)<td class="text-end">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }}</td>@endforeach
+                                    @foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($point['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<td class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }}</td>@endforeach
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th>Разом</th>@foreach(['income', 'expenses', 'net'] as $key)<th class="text-end">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }}</th>@endforeach</tr></tfoot>
+                            <tfoot><tr><th>Разом</th>@foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($monthlySummary['totals']['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<th class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }}</th>@endforeach</tr></tfoot>
                         </table>
                     </div>
                 </div>
@@ -101,17 +104,17 @@
                     <div class="table-responsive">
                         <table id="profit-weekly-expenses" class="table table-striped mb-0 caption-top">
                             <caption class="px-3">Останні 3 місяці: {{ $weeklyStart->format('d.m.Y') }}–{{ $weeklyEnd->format('d.m.Y') }}, незалежно від періоду графіка. Тижні тривають з понеділка до неділі; крайні тижні обмежено цими датами.</caption>
-                            <thead><tr><th>Тиждень ISO</th><th>Дати</th><th class="text-end">Витрати</th></tr></thead>
+                            <thead><tr><th>Тиждень ISO</th><th>Дати</th><th class="text-end text-danger-emphasis profit-expenses">Витрати</th></tr></thead>
                             <tbody>
                             @foreach($weeklySummary['points'] as $point)
                                 <tr>
                                     <td>{{ $point['period'] }}</td>
                                     <td>{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</td>
-                                    <td class="text-end">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }}</td>
+                                    <td class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }}</td>
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }}</th></tr></tfoot>
+                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }}</th></tr></tfoot>
                         </table>
                     </div>
                 </div>
