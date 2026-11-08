@@ -89,6 +89,7 @@ final class CurrencyBridge
 
     private static function quote(string $code, array $uahQuotes): string
     {
+        $code  = 'USDT' === $code ? 'USD' : $code;
         $value = 'UAH' === $code ? '1' : $uahQuotes[$code] ?? null;
         if (!is_string($value)) {
             throw new RuntimeException('Немає поточного курсу ' . $code . ' до гривні.');

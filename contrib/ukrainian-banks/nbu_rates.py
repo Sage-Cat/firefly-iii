@@ -134,6 +134,8 @@ def synchronize(client, nbu, state, today=None):
         for j in g["attributes"]["transactions"]:
             codes.update(code for code in (j["currency_code"], j.get("foreign_currency_code")) if code)
     supported = (codes & FIAT) | set(TARGETS)
+    if "USDT" in codes:
+        supported.add("USD")
     per_uah = {"UAH": {day: Decimal(1) for day in calendar}}
     # Validate every source response before the first write to Firefly.
     for code in sorted(supported - {"UAH"}):
@@ -152,50 +154,41 @@ def synchronize(client, nbu, state, today=None):
                 raise Deferred("NBU cross rate is below Firefly's supported precision")
             changes = {day: str(value) for day, value in required.items() if existing.get(day) != value}
             plan[pair] = (required, changes)
-    manual_derived = 0
+    proxy_derived = 0
     if "USDT" in codes:
-        # NBU has no USDT quote. Preserve the owner's EUR valuation and only
-        # translate that existing valuation into UAH using the dated NBU EUR rate.
-        originals["USDT/EUR"] = client.all("/exchange-rates/USDT/EUR")
-        manual = stored_rates(originals["USDT/EUR"], "USDT", "EUR")
-        usdt_days = [date.fromisoformat(j["date"][:10])
-                     for g in groups for j in g["attributes"]["transactions"]
-                     if "USDT" in (j["currency_code"], j.get("foreign_currency_code"))]
-        required = {}
-        for day in days(min(usdt_days, default=today), today):
-            eligible = [d for d in manual if d <= day]
-            if not eligible:
-                raise Deferred("The existing manual USDT/EUR valuation does not cover its history")
-            required[day] = (manual[max(eligible)] * per_uah["EUR"][day]).quantize(PRECISION, rounding=ROUND_HALF_UP)
-        originals["USDT/UAH"] = client.all("/exchange-rates/USDT/UAH")
-        existing = stored_rates(originals["USDT/UAH"], "USDT", "UAH")
-        changes = {day: str(value) for day, value in required.items() if existing.get(day) != value}
-        if any(value < Decimal("0.0000000001") for value in required.values()):
-            raise Deferred("Manual valuation is below Firefly's supported precision")
-        plan["USDT", "UAH"] = (required, changes)
-        manual_derived = len(required)
+        # The owner explicitly values one USDT as one USD; NBU quotes USD only.
+        for target in TARGETS:
+            originals["USDT/" + target] = client.all(f"/exchange-rates/USDT/{target}")
+            existing = stored_rates(originals["USDT/" + target], "USDT", target)
+            required = {day: (per_uah["USD"][day] / per_uah[target][day]).quantize(PRECISION, rounding=ROUND_HALF_UP)
+                        for day in calendar}
+            if any(value < Decimal("0.0000000001") for value in required.values()):
+                raise Deferred("USD-proxy valuation is below Firefly's supported precision")
+            changes = {day: str(value) for day, value in required.items() if existing.get(day) != value}
+            plan["USDT", target] = (required, changes)
+            proxy_derived += len(required)
     count = sum(len(changes) for _, changes in plan.values())
     if count:
         save_json(state / f"before-{time.time_ns()}.json", {
             "transactions": groups, "accounts": accounts, "rates": originals,
             "changes": {"/".join(pair): changes for pair, (_, changes) in plan.items()}})
     for (base, target), (_, changes) in plan.items():
-        if changes:
-            client.request("POST", f"/exchange-rates/by-currencies/{base}/{target}", changes)
+        # Bound native recalculation work per request when repricing old history.
+        entries = sorted(changes.items())
+        for offset in range(0, len(entries), 10):
+            client.request("POST", f"/exchange-rates/by-currencies/{base}/{target}", dict(entries[offset:offset + 10]))
     for (base, target), (required, changes) in plan.items():
         actual = stored_rates(client.all(f"/exchange-rates/{base}/{target}"), base, target)
         if any(actual.get(day) != value for day, value in required.items()):
             raise Deferred("Stored Firefly rates differ from the prepared dated rates")
-    if "USDT/EUR" in originals and client.all("/exchange-rates/USDT/EUR") != originals["USDT/EUR"]:
-        raise Deferred("The original manual USDT/EUR valuation changed")
     if identities(client.all("/transactions?type=all"), client.all("/accounts?type=asset")) != before:
         raise Deferred("Financial data or classification changed during rate synchronization")
     result = {"finished_at": datetime.now(KYIV).isoformat(), "first": first.isoformat(),
               "last": today.isoformat(), "changed_rates": count,
               "verified_rates": sum(len(required) for required, _ in plan.values()),
-              "verified_nbu_rates": sum(len(required) for required, _ in plan.values()) - manual_derived,
-              "manual_derived_usdt_uah_rates": manual_derived,
-              "unsupported_currencies": sorted(codes - FIAT), "source": SOURCE}
+              "verified_nbu_rates": sum(len(required) for required, _ in plan.values()) - proxy_derived,
+              "usd_proxy_usdt_rates": proxy_derived,
+              "unsupported_currencies": sorted(codes - FIAT - {"USDT"}), "source": SOURCE}
     save_json(state / "last-success.json", result)
     return result
 

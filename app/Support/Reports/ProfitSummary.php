@@ -78,7 +78,7 @@ final class ProfitSummary
             }
             $amount = ltrim($raw, '-');
             $code   = $journal['currency'];
-            if (!in_array($code, ['UAH', 'EUR', 'USD', 'CHF'], true)) {
+            if (!in_array($code, ['UAH', 'EUR', 'USD', 'CHF', 'USDT'], true)) {
                 $manual[$code] = true;
             }
             // The same current UAH bridge is used for every selected period.

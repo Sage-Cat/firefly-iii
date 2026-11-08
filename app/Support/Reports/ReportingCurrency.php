@@ -25,7 +25,7 @@ final class ReportingCurrency
             $target = 'UAH' === $request->query('currency', 'UAH') ? 'UAH' : 'EUR';
         }
 
-        return 'uah-bridge-today-v1:' . self::today()->format('Y-m-d') . ':' . $target;
+        return 'uah-bridge-usd-proxy-v2:' . self::today()->format('Y-m-d') . ':' . $target;
     }
 
     public static function convert(string $amount, string $from, string $to): string
@@ -106,7 +106,10 @@ final class ReportingCurrency
             ->whereDate('date', $day)
             ->get();
         foreach ($rows as $row) {
-            $code  = $currencies[$row->from_currency_id]->code;
+            $code = $currencies[$row->from_currency_id]->code;
+            if ('USDT' === $code) {
+                continue;
+            }
             $value = (string) $row->rate;
             if (isset($quotes[$code]) && bccomp($quotes[$code], $value, 12) !== 0) {
                 throw new RuntimeException('Суперечливі курси ' . $code . ' на ' . $day . '.');
@@ -135,22 +138,8 @@ final class ReportingCurrency
         foreach (['EUR', 'USD', 'CHF'] as $code) {
             CurrencyBridge::rate($code, 'UAH', $quotes);
         }
-        // Preserve the owner's separate manual USDT valuation, never call it NBU.
-        $usdt = $currencies->firstWhere('code', 'USDT');
-        $eur  = $currencies->firstWhere('code', 'EUR');
-        if (null !== $usdt && null !== $eur) {
-            $manual = CurrencyExchangeRate::query()
-                ->where('user_group_id', auth()->user()->user_group_id)
-                ->where('from_currency_id', $usdt->id)
-                ->where('to_currency_id', $eur->id)
-                ->whereDate('date', '<=', $day)
-                ->orderByDesc('date')
-                ->orderByDesc('updated_at')
-                ->first();
-            if (null !== $manual) {
-                $quotes['USDT'] = bcmul((string) $manual->rate, $quotes['EUR'], 20);
-            }
-        }
+        // Owner-selected valuation convention: one USDT uses the NBU USD quote.
+        $quotes['USDT'] = $quotes['USD'];
         request()->attributes->set($key, $quotes);
 
         return $quotes;

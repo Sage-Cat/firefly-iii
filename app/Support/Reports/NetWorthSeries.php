@@ -98,7 +98,7 @@ final class NetWorthSeries
                 if (0 === bccomp($balance, '0', 20)) {
                     continue;
                 }
-                if (!in_array($code, ['EUR', 'UAH', 'USD', 'CHF'], true)) {
+                if (!in_array($code, ['EUR', 'UAH', 'USD', 'CHF', 'USDT'], true)) {
                     $manual[$code] = true;
                 }
                 $uahTotal = bcadd($uahTotal, bcmul($balance, CurrencyBridge::rate($code, 'UAH', $quotes), 20), 20);

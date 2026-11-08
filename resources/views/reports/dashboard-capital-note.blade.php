@@ -14,10 +14,4 @@
 </div>
 @if($capital['error'])
     <p class="text-warning" role="status">{{ $capital['error'] }}</p>
-@elseif(null === $capital['coverage_start'] || $capital['coverage_start'] > $capital['start'])
-    <p class="text-muted small" role="status">Серія «Неповні дані» враховує лише відомі на відповідну дату рахунки.@if($capital['coverage_start']) Усі рахунки враховано з {{ \Carbon\Carbon::parse($capital['coverage_start'])->format('d.m.Y') }}.@endif</p>
-@endif
-<p class="text-muted small">До початку банківських виписок використано датовані знімки залишків. Між знімками зберігається остання відома оцінка. Знімки не є доходами чи витратами.</p>
-@if(!empty($capital['manual_currencies']))
-    <p class="text-muted small">Для {{ implode(', ', $capital['manual_currencies']) }} використано збережену ручну оцінку.</p>
 @endif
