@@ -1,11 +1,67 @@
 """Client for the local Firefly III instance."""
 
+import hashlib
 import json
 import re
 import stat
 import urllib.error
 import urllib.request
+from datetime import datetime
+from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
+
+
+def tag_fingerprint(tags):
+    """Hash the exact set of API tag labels for a conditional tags-only update."""
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        raise ValueError("Invalid transaction tags")
+    return hashlib.sha256(json.dumps(sorted(tags), ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+def internal_card_fingerprint(group_id, journal):
+    """Hash an API journal for the narrow conditional staging DELETE contract."""
+    def identifier(value):
+        value = str(value)
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            raise ValueError("Invalid internal card identifier")
+        return value
+
+    date = datetime.fromisoformat(journal["date"])
+    if date.tzinfo is None or date.microsecond:
+        raise ValueError("Internal card date requires a timezone and whole seconds")
+    try:
+        with localcontext() as context:
+            context.prec = 80
+            amount = abs(Decimal(journal["amount"]))
+            fixed = amount.quantize(Decimal("0.0000000000000001"))
+            if not amount.is_finite() or amount != fixed or not amount:
+                raise ValueError("Invalid internal card amount")
+            amount = format(fixed, ".16f")
+    except (InvalidOperation, TypeError) as error:
+        raise ValueError("Invalid internal card amount") from error
+    tags = journal.get("tags")
+    if tags is None:
+        tags = []
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        raise ValueError("Invalid internal card tags")
+    description = journal["description"]
+    notes = journal.get("notes")
+    if notes is None:
+        notes = ""
+    if not isinstance(description, str) or not isinstance(notes, str):
+        raise ValueError("Invalid internal card text")
+    state = ["internal-card-v1", identifier(group_id), identifier(journal["transaction_journal_id"]),
+             journal["type"].lower(), str(int(date.timestamp())), amount,
+             identifier(journal["currency_id"]), identifier(journal["source_id"]),
+             identifier(journal["destination_id"]), description, notes, sorted(tags)]
+    for field in ("external_id", "internal_reference", "original_source", "import_hash_v2"):
+        value = journal.get(field)
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            raise ValueError("Invalid internal card metadata")
+        state.append(value)
+    return hashlib.sha256(json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -24,7 +80,8 @@ class Client:
             raise ValueError("Invalid API token file")
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None):
+    def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None,
+                 internal_card_hash=None, tags_hash=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -40,6 +97,16 @@ class Client:
             if not re.fullmatch(r"(?:none|[1-9][0-9]*)", category_match):
                 raise ValueError("Invalid expected transaction category")
             headers["If-Match-Category"] = category_match
+        if internal_card_hash is not None:
+            if (not isinstance(internal_card_hash, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", internal_card_hash)
+                    or method != "DELETE" or not re.fullmatch(r"/transactions/[1-9][0-9]*", path)):
+                raise ValueError("Invalid internal card delete precondition")
+            headers["If-Match-Internal-Card"] = internal_card_hash
+        if tags_hash is not None:
+            if not isinstance(tags_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", tags_hash):
+                raise ValueError("Invalid transaction tags hash")
+            headers["If-Match-Tags"] = tags_hash
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method=method)
         try:
             with self._http.open(request, timeout=30) as response:
@@ -53,9 +120,11 @@ class Client:
                 details = "Unexpected non-JSON response"
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
-    def request(self, method, path, data=None, *, notes_hash=None, category_match=None):
+    def request(self, method, path, data=None, *, notes_hash=None, category_match=None, internal_card_hash=None,
+                tags_hash=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
-        result = self._request(method, path, body, "application/json", notes_hash=notes_hash, category_match=category_match)
+        result = self._request(method, path, body, "application/json", notes_hash=notes_hash,
+                               category_match=category_match, internal_card_hash=internal_card_hash, tags_hash=tags_hash)
         return json.loads(result) if result else None
 
     def all(self, path):

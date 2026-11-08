@@ -77,6 +77,10 @@ final class UpdateController extends Controller
      */
     public function update(UpdateRequest $request, TransactionGroup $transactionGroup): JsonResponse
     {
+        if ($request->headers->has('If-Match-Tags')) {
+            return \FireflyIII\Support\Reports\PaymentTagsUpdate::update($request, $transactionGroup);
+        }
+
         if ($request->headers->has('If-Match-Category')) {
             return \FireflyIII\Support\Reports\PaymentCategoryUpdate::update($request, $transactionGroup);
         }

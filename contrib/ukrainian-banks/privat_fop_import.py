@@ -107,7 +107,8 @@ def plan_import(snapshot, config, accounts, groups, frozen=None):
     for row in snapshot["transactions"]:
         key = bank_key(row)
         merchants.setdefault(key, row.get("AUT_CNTR_NAM") or row["OSND"])
-    prepared = dict(config, pairs=exchange_pairs(snapshot), categories=categories, merchants=merchants)
+    prepared = dict(config, pairs=exchange_pairs(snapshot), categories=categories, merchants=merchants,
+                    auto_classification=False)
     source = normalized_source(snapshot, prepared)
     plan = build_plan(prepared, accounts, groups, frozen, source_data=source)
     originals = {bank_key(r): r for r in snapshot["transactions"]}
@@ -172,6 +173,9 @@ def synchronize(command, state_dir, cached=False):
     if config.get("auto_refunds"):
         from bank_refunds import synchronize as synchronize_refunds
         result["refunds"] = synchronize_refunds(client, state_dir.parents[1] / "refunds")
+    if config.get("auto_classification"):
+        from bank_classification import synchronize as synchronize_classification
+        result["classification"] = synchronize_classification(client, state_dir.parents[1] / "bank-classification")
     save_json(state_dir / "last-success.json", result)
     return result
 

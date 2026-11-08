@@ -135,7 +135,10 @@ def collect_sources(config):
                            closing=amount(money(merged[-1]["I"])))
         for row in merged:
             rows[row["key"]] = dict(row, account=cards[card]["account"])
-    return sorted(rows.values(), key=lambda r: (r["date"], r["key"])), cards, coverage
+    ordered = sorted(rows.values(), key=lambda r: (r["date"], r["key"]))
+    from personal_card_transfers import prepare
+    ordered, cards = prepare(ordered, cards, config.get("internal_card_transfers", []))
+    return ordered, cards, coverage
 
 
 def operations(config, rows, assets, groups=None):
@@ -152,6 +155,9 @@ def operations(config, rows, assets, groups=None):
     for row in rows:
         key = row["key"]
         if key in seen:
+            continue
+        if row.get("internal_card_transfer"):
+            seen.add(key)
             continue
         own, value = row["account"], money(row["E"])
         if own not in assets or assets[own]["currency_code"] != row["F"]:
@@ -224,7 +230,10 @@ def build_plan(config, accounts, groups, frozen=None, source_data=None):
         known[own] += money(binding["opening"])
         targets[own] += money(binding["closing"])
         dates[own] = min(dates.get(own, binding["start"]), binding["start"])
-    delta, used = defaultdict(Decimal), set()
+    from personal_card_transfers import plan as plan_internal_cards
+    internal_cards = plan_internal_cards(rows, accounts, groups)
+    delta = defaultdict(Decimal, {a: money(v) for a, v in internal_cards["delta"].items()})
+    used = set()
     for op in ops:
         tx = op["transaction"]
         matches = [g for g in groups if any(journal_keys(j).intersection(op["aliases"])
@@ -297,10 +306,13 @@ def build_plan(config, accounts, groups, frozen=None, source_data=None):
         if money(assets[account]["current_balance"]) + delta[account] != money(target):
             raise Deferred("Projected closing balance does not reconcile")
     return {"openings": openings, "operations": ops, "targets": {a: amount(v) for a, v in targets.items()},
-            "preserved_peers": peers, "coverage": coverage, "source_rows": len(rows)}
+            "preserved_peers": peers, "coverage": coverage, "source_rows": len(rows),
+            "internal_cards": internal_cards, "auto_classification": bool(config.get("auto_classification"))}
 
 
 def apply_plan(client, plan):
+    from personal_card_transfers import apply as apply_internal_cards
+    apply_internal_cards(client, plan.get("internal_cards", {}))
     for account, opening in plan["openings"].items():
         current = client.request("GET", f"/accounts/{account}")["data"]["attributes"]
         date = datetime.fromisoformat(opening["date"]).replace(tzinfo=KYIV).isoformat()
@@ -323,6 +335,9 @@ def apply_plan(client, plan):
         actual = client.request("GET", f"/accounts/{account}")["data"]["attributes"]["current_balance"]
         if money(actual) != money(target):
             raise Deferred("Closing balance verification failed")
+    if plan.get("auto_classification"):
+        from bank_classification import synchronize
+        synchronize(client, Path(__file__).parent / ".state/bank-classification")
     return dict(counts)
 
 

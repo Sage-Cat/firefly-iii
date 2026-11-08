@@ -705,6 +705,9 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
     if config.get("auto_refunds"):
         from bank_refunds import synchronize
         result["refunds"] = synchronize(firefly, state_dir.parent / "refunds")
+    if config.get("auto_classification"):
+        from bank_classification import synchronize as synchronize_classification
+        result["classification"] = synchronize_classification(firefly, state_dir.parent / "bank-classification")
     save_json(state_dir / "last-success.json", result)
     return result
 

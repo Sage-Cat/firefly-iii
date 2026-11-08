@@ -70,6 +70,10 @@ final class DestroyController extends Controller
      */
     public function destroy(TransactionGroup $transactionGroup): JsonResponse
     {
+        if (request()->headers->has('If-Match-Internal-Card')) {
+            return \FireflyIII\Support\Reports\PendingInternalCardDelete::destroy(request(), $transactionGroup, $this->groupRepository);
+        }
+
         Log::debug(sprintf('Now in %s', __METHOD__));
         $this->groupRepository->destroy($transactionGroup);
         Preferences::mark();
