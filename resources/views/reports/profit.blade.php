@@ -1,7 +1,7 @@
 @extends('layout.v3.session')
+{{-- A non-empty comment suppresses the layout's automatic breadcrumbs. --}}
 @section('breadcrumbs')
-    <li class="breadcrumb-item"><a href="{{ route('reports.index') }}">Звіти</a></li>
-    <li class="breadcrumb-item active">Прибуток</li>
+    <!-- -->
 @endsection
 
 @section('content')
