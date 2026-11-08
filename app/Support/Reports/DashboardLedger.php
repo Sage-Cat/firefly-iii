@@ -20,7 +20,7 @@ final class DashboardLedger
         }
         $repository = app(AccountRepositoryInterface::class);
         $repository->setUser($user);
-        $types = array_values(array_unique(array_merge(
+        $types    = array_values(array_unique(array_merge(
             config('firefly.accountTypesByIdentifier.asset'),
             config('firefly.accountTypesByIdentifier.liabilities')
         )));
@@ -32,14 +32,17 @@ final class DashboardLedger
             if (null === $currency) {
                 throw new RuntimeException('Не визначено валюту власного рахунку.');
             }
-            $flag                            = $repository->getMetaValue($account, 'include_net_worth');
-            $history                         = BalanceHistory::read($repository->getNoteText($account) ?? '');
+            $flag     = $repository->getMetaValue($account, 'include_net_worth');
+            $notes    = $repository->getNoteText($account) ?? '';
+            $history  = BalanceHistory::read($notes);
+            $metadata = json_decode($notes, true);
+            $suspense = is_array($metadata) && 1 === ($metadata['bank_review_suspense'] ?? null) && $currency->code === ($metadata['currency'] ?? null);
             $coverage[(string) $account->id] = $history['ledger_from'];
             $accounts[(string) $account->id] = [
                 'id'         => (string) $account->id,
                 'currency'   => $currency->code,
                 'net_worth'  => null === $flag || '1' === $flag,
-                'known_from' => null,
+                'known_from' => $suspense ? '1970-01-01' : null,
                 'snapshots'  => $history['snapshots']
             ];
         }

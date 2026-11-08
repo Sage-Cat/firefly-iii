@@ -96,7 +96,10 @@ def collect_sources(config):
     return sorted(rows.values(), key=lambda r: (r["date"], r["key"])), cards, coverage
 
 
-def operations(config, rows, assets):
+def operations(config, rows, assets, groups=None):
+    from bank_review import apply_review
+    groups = groups or []
+    review_reservations = set()
     by_key = {r["key"]: r for r in rows}
     for row in rows:
         if row["account"] not in assets or assets[row["account"]]["currency_code"] != row["F"]:
@@ -120,6 +123,7 @@ def operations(config, rows, assets):
                                    "balance": row["I"]}, ensure_ascii=False)}
         aliases = [key]
         peer = str(peers[key]) if key in peers else None
+        suspected = bool(row.get("review_own"))
         if key in pairs:
             other = by_key.get(pairs[key])
             if (not other or money(other["E"]) * value >= 0 or other["account"] == own
@@ -143,18 +147,21 @@ def operations(config, rows, assets):
                       destination_id=own if value > 0 else peer)
         else:
             if row["B"] in {"Зарахування зі своєї картки", "Переказ на свою картку"} or "власних коштів" in row["D"].casefold():
-                raise Deferred("Unmapped own transfer")
+                suspected = True
             tx["type"] = "deposit" if value > 0 else "withdrawal"
             tx["destination_id" if value > 0 else "source_id"] = own
             tx["source_name" if value > 0 else "destination_name"] = config.get("merchants", {}).get(key, row["D"].split(". Коментар:")[0])[:255]
-            tx["category_name"] = config.get("categories", {}).get(key, "Потребує уточнення")
-            if tx["category_name"] == "Потребує уточнення":
-                tx["tags"].append("Потребує уточнення")
+            category = config.get("categories", {}).get(key)
+            if category and category != "Потребує уточнення":
+                tx["category_name"] = category
             if row["H"] != row["F"]:
                 foreign = config["currencies"].get(row["H"])
                 if not foreign or money(row["G"]) <= 0:
                     raise Deferred("Foreign transaction currency is not configured")
                 tx.update(foreign_currency_id=foreign, foreign_amount=amount(money(row["G"])))
+        tx = apply_review(tx, own, "in" if value > 0 else "out", row["F"], assets, groups, suspected and not peer,
+                          config.get("merchants", {}).get(key, row["D"].split(". Коментар:")[0]),
+                          reserved=review_reservations)
         output.append({"key": key, "aliases": aliases, "transaction": tx})
         seen.update(aliases)
     if seen != set(by_key):
@@ -165,7 +172,8 @@ def operations(config, rows, assets):
 def build_plan(config, accounts, groups, frozen=None, source_data=None):
     assets = {a["id"]: a["attributes"] for a in accounts}
     rows, cards, coverage = source_data if source_data is not None else collect_sources(config)
-    ops = operations(config, rows, assets)
+    from bank_review import is_suspense, review_update, review_patch, review_notes_update, journal_keys
+    ops = operations(config, rows, assets, groups)
     known, targets, dates = defaultdict(Decimal), defaultdict(Decimal), {}
     for binding in cards.values():
         own = binding["account"]
@@ -177,7 +185,7 @@ def build_plan(config, accounts, groups, frozen=None, source_data=None):
     delta, used = defaultdict(Decimal), set()
     for op in ops:
         tx = op["transaction"]
-        matches = [g for g in groups if any(j.get("external_id") in op["aliases"]
+        matches = [g for g in groups if any(journal_keys(j).intersection(op["aliases"])
                    for j in g["attributes"]["transactions"])]
         if not matches and tx["type"] == "transfer":
             for group in groups:
@@ -198,24 +206,46 @@ def build_plan(config, accounts, groups, frozen=None, source_data=None):
             if len(group["attributes"]["transactions"]) != 1:
                 raise Deferred("Imported transaction was manually split")
             j = group["attributes"]["transactions"][0]
-            if j["type"] != tx["type"] or effects(j, assets) != effects(tx, assets):
+            changed = j["type"] != tx["type"] or effects(j, assets) != effects(tx, assets)
+            approved = review_update(j, tx)
+            metadata = review_notes_update(j, tx)
+            if changed and not approved:
                 raise Deferred("Existing imported transaction changed financially")
+            if metadata:
+                if changed:
+                    raise Deferred("Review alias must not change a confirmed transfer financially")
+                op["patch"] = {"notes": tx["notes"], "transaction_journal_id": j["transaction_journal_id"]}
+            if approved:
+                for account, value in effects(tx, assets).items():
+                    delta[account] += value
+                for account, value in effects(j, assets).items():
+                    delta[account] -= value
+                op["patch"] = review_patch(j, tx)
             op["existing_id"] = group["id"]
             used.add(group["id"])
         else:
             for account, value in effects(tx, assets).items():
                 delta[account] += value
-        op["action"] = "reuse" if matches else "create"
+        op["action"] = "update" if matches and "patch" in op else "reuse" if matches else "create"
     openings = {a: {"value": amount(v), "date": dates[a]} for a, v in known.items()}
     peers = {}
     for account, change in delta.items():
         if account not in targets:
-            peers[account] = assets[account]["current_balance"]
-            openings[account] = {"value": amount(money(assets[account].get("opening_balance")) - change),
-                                 "date": min(dates.values())}
+            if is_suspense(assets[account]):
+                peers[account] = amount(money(assets[account]["current_balance"]) + change)
+            else:
+                peers[account] = assets[account]["current_balance"]
+                openings[account] = {"value": amount(money(assets[account].get("opening_balance")) - change),
+                                     "date": min(dates.values())}
     if frozen:
         openings = frozen["openings"]
-        peers = frozen["preserved_peers"]
+        peers = {}
+        for account in set(delta) | set(frozen["preserved_peers"]):
+            if account in targets:
+                continue
+            opening_delta = (money(openings[account]["value"]) - money(assets[account].get("opening_balance"))
+                             if account in openings else Decimal(0))
+            peers[account] = amount(money(assets[account]["current_balance"]) + delta[account] + opening_delta)
     for account, opening in openings.items():
         if money(opening["value"]) < 0:
             raise Deferred("Import would invent a negative opening balance")
@@ -243,6 +273,9 @@ def apply_plan(client, plan):
         if op["action"] == "create":
             client.request("POST", "/transactions", {"apply_rules": False, "fire_webhooks": False,
                            "error_if_duplicate_hash": True, "transactions": [op["transaction"]]})
+        elif op["action"] == "update":
+            client.request("PUT", f"/transactions/{op['existing_id']}", {"apply_rules": False,
+                           "fire_webhooks": False, "transactions": [op["patch"]]})
         counts[op["action"]] += 1
     for account, target in dict(plan["preserved_peers"], **plan["targets"]).items():
         actual = client.request("GET", f"/accounts/{account}")["data"]["attributes"]["current_balance"]

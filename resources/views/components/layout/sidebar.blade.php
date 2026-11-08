@@ -223,6 +223,7 @@
     @endif
 
     @include('reports.profit-sidebar')
+    @include('reports.payment-review-sidebar')
     <li class="nav-item">
         <a href="{{ route('export.index') }}" class="nav-link {{ menu_item_active_partial('export.') }}">
             <em class="nav-icon bi bi-upload"></em>

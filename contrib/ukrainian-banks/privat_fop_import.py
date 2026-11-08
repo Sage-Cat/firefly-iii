@@ -65,12 +65,10 @@ def normalized_source(snapshot, config):
         is_self = ("власних коштів" in text.casefold() or peer in bindings
                    or str(row.get("AUT_CNTR_CRF", "")) in self_ids
                    or " ".join(row.get("AUT_CNTR_NAM", "").casefold().split()) in self_names)
-        if is_self and key not in config.get("peers", {}) and key not in config.get("pairs", {}):
-            raise Deferred("New FOP own transfer needs recipient evidence")
         rows.append({"A": row["DATE_TIME_DAT_OD_TIM_P"], "B": "ФОП", "C": row["AUT_MY_ACC"],
                      "D": text, "E": amount(value), "F": row["CCY"], "G": row["SUM"],
                      "H": row["CCY"], "I": "", "J": row["CCY"], "account": own,
-                     "key": key, "date": date.isoformat()})
+                     "key": key, "date": date.isoformat(), "review_own": is_self})
     return rows, cards, [{"start": snapshot["start_date"], "end": snapshot["end_date"],
                           "bank_rows": len(posted), "collapsed_transit_legs": len(ignored)}]
 
@@ -108,7 +106,6 @@ def plan_import(snapshot, config, accounts, groups, frozen=None):
     categories, merchants = dict(config.get("categories", {})), dict(config.get("merchants", {}))
     for row in snapshot["transactions"]:
         key = bank_key(row)
-        categories.setdefault(key, "Потребує уточнення")
         merchants.setdefault(key, row.get("AUT_CNTR_NAM") or row["OSND"])
     prepared = dict(config, pairs=exchange_pairs(snapshot), categories=categories, merchants=merchants)
     source = normalized_source(snapshot, prepared)
@@ -118,9 +115,14 @@ def plan_import(snapshot, config, accounts, groups, frozen=None):
         tx = op["transaction"]
         tx["internal_reference"] = "privat-fop"
         tx["tags"] = ["Privat", "ФОП"]
-        if tx.get("category_name") == "Потребує уточнення":
-            tx["tags"].append("Потребує уточнення")
-        tx["notes"] = json.dumps({"bank_records": [originals[k] for k in op["aliases"]]}, ensure_ascii=False)
+        from bank_review import note_object
+        notes = note_object(tx.get("notes"))
+        evidence = {bank_key(row): row for row in notes.get("bank_records", [])}
+        evidence.update({k: originals[k] for k in op["aliases"]})
+        notes["bank_records"] = list(evidence.values())
+        tx["notes"] = json.dumps(notes, ensure_ascii=False)
+        if "patch" in op:
+            op["patch"]["notes"] = tx["notes"]
     return plan
 
 
@@ -146,11 +148,14 @@ def synchronize(command, state_dir, cached=False):
     save_json(state_dir / "last-plan.json", plan)
     if command == "plan":
         return {"source_rows": plan["source_rows"], "actions": {
-            action: sum(o["action"] == action for o in plan["operations"]) for action in ("create", "reuse")}}
+            action: sum(o["action"] == action for o in plan["operations"]) for action in ("create", "update", "reuse")}}
     backup = state_dir / "backups"
     backup.mkdir(mode=0o700, exist_ok=True)
     save_json(backup / (str(time.time_ns()) + ".json"), {
         "accounts": accounts, "transactions": groups, "frozen": frozen})
+    from bank_review import prepare_suspense
+    accounts = prepare_suspense(client, accounts, plan["operations"])
+    plan = plan_import(snapshot, config, accounts, groups, frozen)
     save_json(frozen_file, plan)
     ensure_rates(client, {"openings": [{"account_id": a, **o} for a, o in plan["openings"].items()],
                          "operations": plan["operations"]},

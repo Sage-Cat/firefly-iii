@@ -25,11 +25,12 @@ CURRENCIES = {980: "UAH", 978: "EUR", 840: "USD", 756: "CHF"}
 ZERO = Decimal("0")
 OWN_TRANSFER_HINTS = ("між власними", "між своїми", "своїми рахунками", "зі своєї картки",
                       "з власної картки", "на свою картку", "власних коштів", "власні кошти",
-                      "з чорної картки", "обмін валют", "обмін валюти", "own account", "currency exchange")
+                      "з чорної картки", "з гривневого рахунку фоп", "на гривневий рахунок фоп",
+                      "обмін валют", "обмін валюти", "own account", "currency exchange")
 
 
 class Deferred(RuntimeError):
-    """An ambiguous or inconsistent source must not change the ledger."""
+    """Inconsistent bank data or an invalid confirmed mapping must not change the ledger."""
 
 
 def read_json(path):
@@ -223,7 +224,10 @@ def bank_records(config, snapshot):
     return targets, sorted(records, key=lambda r: (r["item"]["time"], r["key"]))
 
 
-def make_operations(config, records, assets):
+def make_operations(config, records, assets, groups=None):
+    from bank_review import apply_review, matching_journal, review_of, note_object
+    groups = groups or []
+    review_reservations = set()
     operations, consumed = [], set()
     by_bank = {b["bank_id"]: b for b in config["bindings"]}
     own_ibans = {iban.replace(" ", ""): b["firefly_id"] for b in config["bindings"]
@@ -240,6 +244,41 @@ def make_operations(config, records, assets):
     def mapped_peer(record):
         return config.get("approved_transfers", {}).get(record["key"]) or own_ibans.get(
             record["item"].get("counterIban", "").replace(" ", ""))
+
+    def own_identity(record, expected):
+        mapped = mapped_peer(record)
+        if mapped:
+            return mapped == expected
+        if record["item"].get("counterIban"):
+            return False
+        name = record["item"].get("counterName", "").casefold().strip()
+        if name and tuple(sorted(name.split())) not in normalized_names:
+            return False
+        description = record["item"].get("description", "").casefold()
+        return tuple(sorted(name.split())) in normalized_names or any(h in description for h in OWN_TRANSFER_HINTS)
+
+    def same_currency_pair(left, right):
+        return (left["binding"]["firefly_id"] != right["binding"]["firefly_id"]
+                and left["binding"]["currency_code"] == right["binding"]["currency_code"]
+                and minor(left["item"]["amount"]) == -minor(right["item"]["amount"])
+                and abs(left["item"]["time"] - right["item"]["time"]) <= 600)
+
+    def reciprocal_records(record, peer, available=False):
+        return [r for r in records if (not available or r["key"] not in consumed)
+                and r["binding"]["firefly_id"] == peer and same_currency_pair(record, r)
+                and own_identity(r, record["binding"]["firefly_id"])]
+
+    def review_pair_safe(left, right):
+        source = left if left["item"]["amount"] < 0 else right
+        destination = right if source is left else left
+        for record in (left, right):
+            existing = matching_journal(groups, record["key"])
+            state = review_of(existing) if existing else None
+            if state and (state.get("status") != "resolved" or state.get("decision", {}).get("kind") != "transfer"
+                          or str(existing.get("source_id")) != source["binding"]["firefly_id"]
+                          or str(existing.get("destination_id")) != destination["binding"]["firefly_id"]):
+                return False
+        return True
 
     def exchange_matches(left, right):
         a, b = left["item"], right["item"]
@@ -274,6 +313,11 @@ def make_operations(config, records, assets):
         value = minor(item["amount"])
         own = b["firefly_id"]
         peer = mapped_peer(record)
+        if not peer:
+            reverse = [r for r in records if r["key"] not in consumed and same_currency_pair(record, r)
+                       and mapped_peer(r) == own and own_identity(record, r["binding"]["firefly_id"])]
+            if len(reverse) == 1:
+                peer = reverse[0]["binding"]["firefly_id"]
         exchange_pair = None
         candidates = [r for r in records if r["key"] not in consumed and exchange_matches(record, r)]
         compatible = [r for r in candidates if approved_pairs.get(r["key"]) in {None, record["key"]}]
@@ -291,26 +335,29 @@ def make_operations(config, records, assets):
             exchange_pair = candidates[0]
             peer = exchange_pair["binding"]["firefly_id"]
         aliases = [record["key"]]
+        suspected, suggested_peer = False, None
         if peer:
             if peer == own or peer not in assets:
                 raise Deferred("Invalid own-transfer account mapping")
             if assets[peer]["currency_code"] != b["currency_code"] and not exchange_pair:
                 raise Deferred("Cross-currency own transfer needs both exact currency amounts")
-            # Both bank legs must become a single Firefly transfer.
+            # A missing reciprocal bank field is classification work, not a reason to stop ingestion.
             if peer in {x["firefly_id"] for x in by_bank.values()}:
-                matches = [exchange_pair] if exchange_pair else [r for r in records if r["binding"]["firefly_id"] == peer
-                           and minor(r["item"]["amount"]) == -value
-                           and abs(r["item"]["time"] - item["time"]) <= 600
-                           and (config.get("approved_transfers", {}).get(r["key"]) or
-                                own_ibans.get(r["item"].get("counterIban", "").replace(" ", ""))) == own
-                           and r["key"] not in consumed]
-                if len(matches) != 1:
-                    raise Deferred("Own transfer does not have a unique matching bank leg")
-                other = matches[0]
-                aliases.append(other["key"])
-                if value > 0:
-                    record, item, b = other, other["item"], other["binding"]
-                    value, own, peer = minor(item["amount"]), peer, own
+                matches = [exchange_pair] if exchange_pair else reciprocal_records(record, peer, available=True)
+                unique = len(matches) == 1
+                if unique and not exchange_pair:
+                    unique = (len(reciprocal_records(record, peer)) == 1
+                              and len(reciprocal_records(matches[0], own)) == 1)
+                if not unique or not review_pair_safe(record, matches[0]):
+                    suggested_peer, peer, suspected = peer, None, True
+                    exchange_pair = None
+                else:
+                    other = matches[0]
+                    aliases.append(other["key"])
+                    if value > 0:
+                        record, item, b = other, other["item"], other["binding"]
+                        value, own, peer = minor(item["amount"]), peer, own
+        if peer:
             source, destination = (peer, own) if value > 0 else (own, peer)
             kind = "transfer"
         else:
@@ -318,7 +365,7 @@ def make_operations(config, records, assets):
             description = item.get("description", "").casefold()
             if (tuple(sorted(counter_name.split())) in normalized_names or any(name and name in description for name in self_names)
                     or any(hint in description for hint in OWN_TRANSFER_HINTS)):
-                raise Deferred("Own transfer requires confirmation of the other account")
+                suspected = True
             source = own if value < 0 else None
             destination = own if value > 0 else None
             kind = "withdrawal" if value < 0 else "deposit"
@@ -343,6 +390,12 @@ def make_operations(config, records, assets):
             transaction["destination_id"] = destination
         else:
             transaction["destination_name"] = (item.get("counterName") or text)[:255]
+        transaction = apply_review(transaction, own, "in" if value > 0 else "out", b["currency_code"],
+                                   assets, groups, suspected, item.get("counterName") or text, reserved=review_reservations)
+        if suggested_peer and review_of(transaction) and review_of(transaction).get("status") in {"pending", "decided"}:
+            notes = note_object(transaction["notes"])
+            notes["bank_review"]["suggested_account_id"] = suggested_peer
+            transaction["notes"] = json.dumps(notes, ensure_ascii=False)
         operations.append({"key": record["key"], "aliases": aliases, "transaction": transaction})
         consumed.update(aliases)
     return operations
@@ -362,11 +415,12 @@ def effects(transaction, assets):
 
 
 def find_existing(operation, groups, references):
+    from bank_review import journal_keys
     matches = []
     for group in groups:
         journals = group["attributes"]["transactions"]
         if (references.get(operation["key"]) == group["id"] or any(
-                j.get("external_id") in operation["aliases"] for j in journals)):
+                journal_keys(j).intersection(operation["aliases"]) for j in journals)):
             matches.append(group)
     if len(matches) > 1:
         raise Deferred("Duplicate external identifier in Firefly")
@@ -400,7 +454,8 @@ def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=
         a = assets.get(b["firefly_id"])
         if not a or a["currency_code"] != b["currency_code"]:
             raise Deferred("Firefly account mapping or currency is invalid")
-    operations = make_operations(config, records, assets)
+    from bank_review import is_suspense, review_update, review_patch, review_notes_update
+    operations = make_operations(config, records, assets, groups)
     references = references or {}
     delta, used_groups = {}, set()
     for operation in operations:
@@ -425,6 +480,14 @@ def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=
                            datetime.fromisoformat(old[k]) != datetime.fromisoformat(v)
                            if k == "date" else str(old.get(k)) != str(v))
                           for k, v in patch.items())
+            if review_update(old, desired):
+                patch = review_patch(old, desired)
+                changed = True
+            elif review_notes_update(old, desired):
+                if changed:
+                    raise Deferred("Review alias must not change a confirmed transfer financially")
+                patch = {"notes": desired["notes"]}
+                changed = True
             operation["patch"] = dict(patch, transaction_journal_id=old["transaction_journal_id"])
             operation["action"] = "update" if changed else "reuse"
         else:
@@ -440,7 +503,7 @@ def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=
             baseline["accounts"][account] = amount(closing - movement[account])
         # External peers keep their current closing balance when known history is backfilled.
         for account, value in delta.items():
-            if account not in targets:
+            if account not in targets and not is_suspense(assets[account]):
                 baseline["accounts"][account] = amount(money(assets[account].get("opening_balance")) - value)
     if baseline["start_date"] != config["start_date"]:
         raise Deferred("Changing an established import start requires a separate migration")
@@ -622,6 +685,10 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
     backup_dir.mkdir(mode=0o700, exist_ok=True)
     save_json(backup_dir / f"before-{time.time_ns()}.json", {
         "accounts": accounts, "transactions": groups, "active_state": previous_state})
+    from bank_review import prepare_suspense
+    accounts = prepare_suspense(firefly, accounts, plan["operations"])
+    plan = plan_sync(config, snapshot, accounts, groups, plan["baseline"],
+                     read_json(refs_file) if refs_file.exists() else None)
     ensure_rates(firefly, plan, {a["id"]: a["attributes"] for a in accounts}, state_dir)
     # Re-read after rate lookup: another connector or the user may have edited the ledger.
     accounts = firefly.all("/accounts?type=asset")
