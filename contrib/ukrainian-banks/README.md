@@ -25,12 +25,36 @@ The tests demonstrate configuration shapes with synthetic identifiers.
 
 Start with `python3 monobank_sync.py plan` or
 `python3 privat_fop_import.py plan`. Review reconciliation results before
-using the corresponding `sync` command. Ambiguous transfers, missing rates,
-and unexplained balance differences defer the import. Personal XLSX imports
+using the corresponding `sync` command. Missing rates and unexplained balance differences defer the import.
+Missing categories and unconfirmed counterpart accounts do not. Personal XLSX imports
 support planning only. NBU reporting targets are UAH and EUR; supported fiat
 sources are UAH, EUR, USD, and CHF. USDT explicitly follows the profile convention of 1 USDT = 1 USD, using
 dated NBU USD quotes for UAH and EUR valuation. This is a USD proxy, not
 an official NBU stablecoin quote. Historical rate writes use bounded batches.
+
+## Payment review
+
+Valid uncategorized payments are imported without a category. A suspected own
+transfer with an unconfirmed counterpart uses a zero-opening asset account
+marked `bank_review_suspense` for the original currency. Its opposing balance
+is provisional; it does not produce income or spending. Only needed suspense
+accounts are provisioned, after a successful dry reconciliation in write mode.
+
+The native **Уточнення платежів** sidebar page at `/transactions/review` offers
+category suggestions based on confirmed history and clearly labelled bank
+hints. It never applies a suggestion automatically. Ordinary category choices
+update only the category relation. A queued transfer choice records a bound
+`bank_review` decision in the existing note JSON, preserving bank evidence;
+the next sync applies the counterpart or external category. Queued decisions
+remain immutable until applied, preventing a concurrent sync from losing a
+newer choice. Repeated imports preserve manual categories and resolved choices.
+
+Only same-currency owned accounts may be chosen as counterparts. Cross-bank
+opposing records can reuse a uniquely confirmed journal with retained source
+aliases. Separate similar payments are not collapsed. If both bank legs were
+already staged independently, `paired_pending` keeps them visible without a
+non-atomic merge; remaining valid payments continue importing. Resolve that
+pair conflict before finalizing its reroute.
 
 ## Balance valuation history
 

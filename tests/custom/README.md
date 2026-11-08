@@ -54,3 +54,10 @@ node tests/custom/dashboard_history_url.mjs
 ```
 
 Generated `public/build` files remain ignored by Git.
+
+Payment-review checks cover recommendation-only choices, owner/category/account
+scope, stale requests, immutable queued decisions, category-only writes and
+CSRF protection. `payment_review_storage.php` creates an isolated in-memory
+SQLite schema with synthetic rows; it does not read production accounts.
+For testing against a separately installed application, set
+`FIREFLY_TEST_APP_ROOT` to its root; the default is this repository.
