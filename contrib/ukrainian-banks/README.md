@@ -56,6 +56,26 @@ already staged independently, `paired_pending` keeps them visible without a
 non-atomic merge; remaining valid payments continue importing. Resolve that
 pair conflict before finalizing its reroute.
 
+## Pending monobank authorizations
+
+Set `"pending_authorizations": true` in the monobank configuration to import
+pending external withdrawals immediately with the managed tag
+`monobank: очікує підтвердження`. Settlement updates the same journal and
+removes only its managed pending status, preserving owner categories, budgets,
+tags and unrelated notes. A changed bank ID creates a replacement only after
+a unique exact match; ambiguous matches and conflicting owner edits stay for
+review. The planner also protects owner edits made between a replacement
+creation, a rejected release and a retry.
+
+A disappeared or zeroed authorization is retired only with coherent fresh
+bank evidence and reconciled balances; no compensating income is created.
+Refresh coverage reaches the oldest live authorization even after an
+interrupted import. Updates and releases use `If-Match-Bank-Authorization`
+against a fresh, locked journal snapshot. Private source backups and an
+archived note retain release evidence and assignment metadata. Without this
+option, pending authorizations wait for settlement. Pending incoming payments
+and own transfers require separate confirmation.
+
 ## Refunds and cashback
 
 Refund synchronization is opt-in: set `"auto_refunds": true` in the provider
@@ -90,8 +110,8 @@ external deposits only. Prefixes respect word boundaries and ignore case and
 repeated whitespace. Rules and account bindings belong to each installation.
 
 Classification preserves manual categories and existing tags, skips ambiguous
-rules, refunds, unsettled records and unresolved own transfers, and never
-creates financial movements. Category writes use `If-Match-Category`.
+rules, refunds, unmanaged unsettled records and unresolved own transfers, and
+never creates financial movements. Category writes use `If-Match-Category`.
 Additive tag writes merge the freshly read list and use `If-Match-Tags` with
 the expected category; concurrent owner changes return 409. Both conditional
 paths disable rules and webhooks and leave amounts, dates, budgets and notes

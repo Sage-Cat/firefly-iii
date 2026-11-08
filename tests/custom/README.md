@@ -84,3 +84,10 @@ technical same-asset card staging, complete snapshot checks, lock coverage,
 rollback, native soft deletion and ordinary DELETE behavior. Both use isolated
 in-memory SQLite fixtures. Cross-language Python fixtures verify the exact
 fingerprints used by the native API.
+
+`bank_authorization_mutation.php` checks conditional pending-withdrawal updates
+and release, full snapshot conflicts, owner metadata, native controller
+integration, account currencies and rollback. It uses isolated in-memory
+SQLite rows and loads this repository's controllers explicitly. The Python
+authorization suites cover pending/settled status, amount corrections, changed
+bank IDs, release coverage, interrupted retries and concurrent owner edits.
