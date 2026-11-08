@@ -66,8 +66,8 @@ def prepare(rows, cards, confirmations):
             raise Deferred('Internal-card confirmation does not match the incoming bank record')
         debits = [r for r in rows if r['C'] == source and money(r['E']) == -money(credit['E'])
                   and datetime.fromisoformat(r['date']).isoformat(timespec='minutes') == minute
-                  and r['B'] == 'Переказ на свою картку'
-                  and re.search(r'\*\s*' + re.escape(proof['destination_suffix']) + r'\b', r['D'])]
+                  and re.search(r'^\s*На\s+свою\s+картку\s*\*\s*'
+                                + re.escape(proof['destination_suffix']) + r'\b', r['D'], re.IGNORECASE)]
         if len(debits) > 1:
             raise Deferred('Internal-card debit is ambiguous')
         if debits:
