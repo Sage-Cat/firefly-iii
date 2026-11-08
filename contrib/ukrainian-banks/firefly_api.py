@@ -64,6 +64,52 @@ def internal_card_fingerprint(group_id, journal):
     return hashlib.sha256(json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
+def bank_authorization_fingerprint(group_id, journal):
+    """Hash the complete API snapshot used to revise or retire a bank hold."""
+    def identifier(value, optional=False):
+        if optional and value is None:
+            return ""
+        value = str(value)
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            raise ValueError("Invalid bank authorization identifier")
+        return value
+
+    date = datetime.fromisoformat(journal["date"])
+    if date.tzinfo is None or date.microsecond:
+        raise ValueError("Bank authorization date requires a timezone and whole seconds")
+    try:
+        with localcontext() as context:
+            context.prec = 80
+            amount = Decimal(journal["amount"])
+            fixed = amount.quantize(Decimal("0.0000000000000001"))
+            if not amount.is_finite() or amount != fixed or amount <= 0:
+                raise ValueError("Invalid bank authorization amount")
+            amount = format(fixed, ".16f")
+    except (InvalidOperation, TypeError) as error:
+        raise ValueError("Invalid bank authorization amount") from error
+    if journal["type"].lower() != "withdrawal":
+        raise ValueError("Bank authorization must be a withdrawal")
+    tags = journal.get("tags")
+    tags = [] if tags is None else tags
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        raise ValueError("Invalid bank authorization tags")
+    description, notes = journal["description"], journal.get("notes")
+    notes = "" if notes is None else notes
+    if not isinstance(description, str) or not isinstance(notes, str):
+        raise ValueError("Invalid bank authorization text")
+    state = ["bank-authorization-v1", identifier(group_id), identifier(journal["transaction_journal_id"]),
+             "withdrawal", str(int(date.timestamp())), amount, identifier(journal["currency_id"]),
+             identifier(journal["source_id"]), identifier(journal["destination_id"]), description, notes, sorted(tags)]
+    state.extend(identifier(journal.get(field), optional=True) for field in ("category_id", "budget_id", "bill_id"))
+    for field in ("external_id", "internal_reference", "original_source", "import_hash_v2"):
+        value = journal.get(field)
+        value = "" if value is None else value
+        if not isinstance(value, str):
+            raise ValueError("Invalid bank authorization metadata")
+        state.append(value)
+    return hashlib.sha256(json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -81,7 +127,7 @@ class Client:
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None,
-                 internal_card_hash=None, tags_hash=None):
+                 internal_card_hash=None, tags_hash=None, bank_authorization_hash=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -107,6 +153,13 @@ class Client:
             if not isinstance(tags_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", tags_hash):
                 raise ValueError("Invalid transaction tags hash")
             headers["If-Match-Tags"] = tags_hash
+        if bank_authorization_hash is not None:
+            if (not isinstance(bank_authorization_hash, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", bank_authorization_hash)
+                    or method not in {"PUT", "DELETE"} or not re.fullmatch(r"/transactions/[1-9][0-9]*", path)
+                    or any(value is not None for value in (notes_hash, category_match, internal_card_hash, tags_hash))):
+                raise ValueError("Invalid bank authorization precondition")
+            headers["If-Match-Bank-Authorization"] = bank_authorization_hash
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method=method)
         try:
             with self._http.open(request, timeout=30) as response:
@@ -121,10 +174,11 @@ class Client:
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
     def request(self, method, path, data=None, *, notes_hash=None, category_match=None, internal_card_hash=None,
-                tags_hash=None):
+                tags_hash=None, bank_authorization_hash=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
         result = self._request(method, path, body, "application/json", notes_hash=notes_hash,
-                               category_match=category_match, internal_card_hash=internal_card_hash, tags_hash=tags_hash)
+                               category_match=category_match, internal_card_hash=internal_card_hash, tags_hash=tags_hash,
+                               bank_authorization_hash=bank_authorization_hash)
         return json.loads(result) if result else None
 
     def all(self, path):

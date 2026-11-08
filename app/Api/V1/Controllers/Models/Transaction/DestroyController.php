@@ -70,6 +70,10 @@ final class DestroyController extends Controller
      */
     public function destroy(TransactionGroup $transactionGroup): JsonResponse
     {
+        if (request()->headers->has('If-Match-Bank-Authorization')) {
+            return \FireflyIII\Support\Reports\BankAuthorizationMutation::destroy(request(), $transactionGroup, $this->groupRepository);
+        }
+
         if (request()->headers->has('If-Match-Internal-Card')) {
             return \FireflyIII\Support\Reports\PendingInternalCardDelete::destroy(request(), $transactionGroup, $this->groupRepository);
         }

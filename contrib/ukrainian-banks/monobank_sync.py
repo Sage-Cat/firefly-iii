@@ -93,7 +93,7 @@ def validate_bindings(config):
             raise Deferred("Bank and Firefly bindings must be one-to-one")
 
 
-def collect(bank, config, state_dir=STATE):
+def collect(bank, config, state_dir=STATE, pending_since=None):
     """Persist a full selected history, refreshing a seven-day overlap each run."""
     validate_bindings(config)
     requested = int(time.time())
@@ -111,8 +111,13 @@ def collect(bank, config, state_dir=STATE):
         # A cached range must actually cover the configured start.
         if old and old["from"] <= beginning:
             beginning = max(beginning, old["to"] - 7 * 86400)
+            pending_times = [i["time"] for i in old.get("items", []) if i.get("hold")]
+            if config.get("pending_authorizations") and pending_times:
+                beginning = max(start_timestamp(config), min(beginning, min(pending_times)))
         else:
             old = None
+        if config.get("pending_authorizations") and pending_since is not None:
+            beginning = max(start_timestamp(config), min(beginning, pending_since))
         cursor = beginning
         refreshed = {}
         while cursor < started:
@@ -130,7 +135,7 @@ def collect(bank, config, state_dir=STATE):
         merged.update(refreshed)
         envelope = {"account_id": account_id,
                     "from": min(start_timestamp(config), old["from"]) if old else start_timestamp(config),
-                    "to": started, "fetched_at": int(time.time()),
+                    "to": started, "refresh_from": beginning, "fetched_at": int(time.time()),
                     "items": list(merged.values())}
         # Commit the coherent snapshot only after every account has been fetched.
         envelopes[path.name] = envelope
@@ -188,8 +193,30 @@ def extend_snapshot(bank, config, snapshot, state_dir=STATE):
     return result
 
 
-def bank_records(config, snapshot):
+def check_bank_closing(config, snapshot, targets, releases=()):
+    for binding in config["bindings"]:
+        items = snapshot["statements"][statement_file(binding["bank_id"])]["items"]
+        closing = items if config.get("pending_authorizations") else [i for i in items if not i.get("hold")]
+        if not closing:
+            continue
+        newest = max(i["time"] for i in closing)
+        balances = {minor(i["balance"]) for i in closing if i["time"] == newest}
+        present = {external_key(binding["bank_id"], i["id"]) for i in items if i["amount"]}
+        # A historical row can still include a subsequently released hold. Only
+        # freshly proven releases preceding that row explain this exact delta.
+        released = sum((money(r["journal"]["amount"]) for r in releases
+                        if str(r["journal"]["source_id"]) == binding["firefly_id"]
+                        and r["journal"]["external_id"] not in present
+                        and datetime.fromisoformat(r["journal"]["date"]).timestamp() < newest), ZERO)
+        target = targets[binding["firefly_id"]]
+        if target not in balances and (not released or target not in {v + released for v in balances}):
+            raise Deferred("Statement closing balance differs from account snapshot; fetch again")
+
+
+def bank_records(config, snapshot, *, check_closing=True):
     validate_bindings(config)
+    if config.get("pending_authorizations") and config.get("provider", "monobank") != "monobank":
+        raise Deferred("Authorization handling is supported only for monobank")
     accounts = {a["id"]: a for a in snapshot["client_info"]["data"]["accounts"]}
     targets, records = {}, []
     for b in config["bindings"]:
@@ -202,12 +229,6 @@ def bank_records(config, snapshot):
         envelope = snapshot["statements"][statement_file(b["bank_id"])]
         if envelope["from"] > start_timestamp(config):
             raise Deferred("Statement history does not cover the selected start")
-        settled = [i for i in envelope["items"] if not i.get("hold")]
-        if settled:
-            newest = max(i["time"] for i in settled)
-            balances = {minor(i["balance"]) for i in settled if i["time"] == newest}
-            if targets[b["firefly_id"]] not in balances:
-                raise Deferred("Statement closing balance differs from account snapshot; fetch again")
         seen = set()
         for item in envelope["items"]:
             if item["time"] < start_timestamp(config):
@@ -215,18 +236,28 @@ def bank_records(config, snapshot):
             if item["id"] in seen:
                 raise Deferred("Duplicate bank record in source")
             seen.add(item["id"])
-            if item.get("hold"):
+            if "hold" in item and type(item["hold"]) is not bool:
+                raise Deferred("Bank authorization status must be a boolean")
+            if item.get("hold") and not config.get("pending_authorizations"):
                 raise Deferred("Pending bank authorization; wait for settlement before reconciliation")
+            if item.get("hold") and item["amount"] > 0:
+                raise Deferred("Incoming pending authorization needs separate confirmation")
             if minor(item["amount"]) == ZERO:
                 continue
             records.append({"binding": b, "item": item,
                             "key": external_key(b["bank_id"], item["id"], config.get("provider", "monobank"))})
+    if check_closing:
+        check_bank_closing(config, snapshot, targets)
     return targets, sorted(records, key=lambda r: (r["item"]["time"], r["key"]))
 
 
 def make_operations(config, records, assets, groups=None):
     from bank_review import apply_review, matching_journal, review_of, note_object
     groups = groups or []
+    cancellations = {}
+    if config.get("pending_authorizations"):
+        from monobank_authorizations import cancellation_pairs
+        cancellations = cancellation_pairs(records, groups, assets)
     review_reservations = set()
     operations, consumed = [], set()
     by_bank = {b["bank_id"]: b for b in config["bindings"]}
@@ -396,6 +427,10 @@ def make_operations(config, records, assets, groups=None):
             notes = note_object(transaction["notes"])
             notes["bank_review"]["suggested_account_id"] = suggested_peer
             transaction["notes"] = json.dumps(notes, ensure_ascii=False)
+        if config.get("pending_authorizations"):
+            from monobank_authorizations import annotate
+            transaction = annotate(transaction, item, own, b["currency_code"],
+                                   matching_journal(groups, record["key"]), cancellations.get(record["key"]))
         operations.append({"key": record["key"], "aliases": aliases, "transaction": transaction})
         consumed.update(aliases)
     return operations
@@ -449,15 +484,28 @@ def find_existing(operation, groups, references):
 
 def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=None):
     assets = {a["id"]: a["attributes"] for a in account_rows}
-    targets, records = bank_records(config, snapshot)
+    targets, records = bank_records(config, snapshot, check_closing=not config.get("pending_authorizations"))
     for b in config["bindings"]:
         a = assets.get(b["firefly_id"])
         if not a or a["currency_code"] != b["currency_code"]:
             raise Deferred("Firefly account mapping or currency is invalid")
     from bank_review import is_suspense, review_update, review_patch, review_notes_update
     operations = make_operations(config, records, assets, groups)
+    authorization_voids = []
+    if config.get("pending_authorizations"):
+        from monobank_authorizations import cancellation_pairs, missing, preserve_replacements
+        extra, authorization_voids = missing(config, snapshot, records, groups, assets,
+                                             cancellation_pairs(records, groups, assets))
+        operations.extend(extra)
+        releases = {r["journal"]["external_id"]: r for r in (baseline or {}).get("authorization_releases", [])}
+        releases.update({r["journal"]["external_id"]: r for r in authorization_voids})
+        check_bank_closing(config, snapshot, targets, releases.values())
+        preserve_replacements(operations, authorization_voids, groups)
     references = references or {}
     delta, used_groups = {}, set()
+    for retired in authorization_voids:
+        for account, value in effects(retired["journal"], assets).items():
+            delta[account] = delta.get(account, ZERO) - value
     for operation in operations:
         existing = find_existing(operation, groups, references)
         operation["existing_id"] = existing["id"] if existing else None
@@ -488,6 +536,12 @@ def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=
                     raise Deferred("Review alias must not change a confirmed transfer financially")
                 patch = {"notes": desired["notes"]}
                 changed = True
+            if config.get("pending_authorizations"):
+                from monobank_authorizations import authorization
+                if authorization(old):
+                    patch.update(notes=desired["notes"], tags=desired["tags"])
+                    changed = changed or old.get("notes") != desired["notes"] or sorted(old.get("tags") or []) != sorted(desired["tags"])
+                    operation["authorization_expected"] = copy.deepcopy(old)
             operation["patch"] = dict(patch, transaction_journal_id=old["transaction_journal_id"])
             operation["action"] = "update" if changed else "reuse"
         else:
@@ -524,10 +578,19 @@ def plan_sync(config, snapshot, account_rows, groups, baseline=None, references=
     for account, target in targets.items():
         if predicted[account] != target:
             raise Deferred("Bank and predicted ledger balances differ; no balancing transaction was invented")
+    if authorization_voids:
+        baseline = copy.deepcopy(baseline)
+        # Retain bank-backed release evidence across retries and later refreshes:
+        # historical statement balances can continue to include the old hold.
+        baseline["authorization_releases"] = [
+            {"journal": {k: r["journal"][k] for k in ("external_id", "source_id", "amount", "date")},
+             "refresh_from": r["refresh_from"], "to": r["to"], "reason": r["reason"]}
+            for r in releases.values()]
     # Established baselines are immutable: later unexplained drift must be investigated.
     return {"baseline": baseline, "first": first, "openings": openings,
             "operations": operations, "targets": {k: amount(v) for k, v in targets.items()},
             "preserved_peers": {k: amount(predicted[k]) for k in delta if k not in targets},
+            "authorization_voids": authorization_voids,
             "source_at": snapshot["client_info"].get("as_of", snapshot["client_info"]["request_started_at"])}
 
 
@@ -614,6 +677,28 @@ def apply_plan(firefly, plan, state_dir=STATE, config=None):
             payload["notes"] = (a.get("notes") or "") + note
         firefly.request("PUT", f"/accounts/{account_id}", payload)
     counts = {"create": 0, "update": 0, "reuse": 0}
+    # Preserve replacement metadata durably before removing the obsolete hold.
+    # If interrupted, the replacement's bank key makes the next POST a reuse.
+    for operation in plan["operations"]:
+        if operation.get("replaces_authorization") and operation["action"] == "create":
+            response = firefly.request("POST", "/transactions", {
+                "apply_rules": False, "fire_webhooks": False, "error_if_duplicate_hash": True,
+                "transactions": [operation["transaction"]]})
+            operation["existing_id"] = response["data"]["id"]
+            operation["action"] = "precreated"
+            for key in operation["aliases"]:
+                references[key] = operation["existing_id"]
+            save_json(refs_path, references)
+    for retired in plan.get("authorization_voids", []):
+        from firefly_api import bank_authorization_fingerprint
+        archive = state_dir / "authorization-voids"
+        archive.mkdir(mode=0o700, exist_ok=True)
+        save_json(archive / f"before-{time.time_ns()}.json", retired)
+        firefly.request("DELETE", f"/transactions/{retired['group_id']}",
+                        bank_authorization_hash=bank_authorization_fingerprint(retired["group_id"], retired["journal"]))
+        references = {key: group for key, group in references.items() if group != retired["group_id"]}
+        save_json(refs_path, references)
+        counts["void"] = counts.get("void", 0) + 1
     for operation in plan["operations"]:
         action = operation["action"]
         if action == "create":
@@ -623,14 +708,18 @@ def apply_plan(firefly, plan, state_dir=STATE, config=None):
             group_id = response["data"]["id"]
         elif action == "update":
             group_id = operation["existing_id"]
+            options = {}
+            if operation.get("authorization_expected"):
+                from firefly_api import bank_authorization_fingerprint
+                options["bank_authorization_hash"] = bank_authorization_fingerprint(group_id, operation["authorization_expected"])
             firefly.request("PUT", f"/transactions/{group_id}", {
-                "apply_rules": False, "fire_webhooks": False, "transactions": [operation["patch"]]})
+                "apply_rules": False, "fire_webhooks": False, "transactions": [operation["patch"]]}, **options)
         else:
             group_id = operation["existing_id"]
         for key in operation["aliases"]:
             references[key] = group_id
         save_json(refs_path, references)
-        counts[action] += 1
+        counts["create" if action == "precreated" else action] += 1
     checks = dict(plan["targets"], **plan["preserved_peers"])
     for account, expected in checks.items():
         actual = firefly.request("GET", f"/accounts/{account}")["data"]["attributes"]["current_balance"]
@@ -647,6 +736,7 @@ def apply_plan(firefly, plan, state_dir=STATE, config=None):
 
 def run(command, cached=False, state_dir=STATE, from_date=None):
     config, baseline = load_active_state(state_dir)
+    firefly = None
     previous_state = {"config": copy.deepcopy(config), "baseline": copy.deepcopy(baseline)}
     backfill = command in {"backfill-plan", "backfill"}
     if backfill:
@@ -665,8 +755,22 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
     else:
         if from_date is not None:
             raise Deferred("Use the explicit backfill command to change the import date")
-        snapshot = cached_snapshot(config, state_dir) if cached else collect(BankClient(), config, state_dir)
-    firefly = FireflyClient()
+        if cached:
+            snapshot = cached_snapshot(config, state_dir)
+        else:
+            pending_since = None
+            if config.get("pending_authorizations"):
+                from monobank_authorizations import authorization
+                firefly = FireflyClient()
+                owned = {b["firefly_id"] for b in config["bindings"]}
+                # The native ledger survives a failed apply even if the previous
+                # source refresh already dropped the disappeared authorization.
+                pending = [a["bank_time"] for g in firefly.all("/transactions?type=all")
+                           for j in g["attributes"]["transactions"]
+                           if (a := authorization(j)) and a["status"] == "pending" and a["account_id"] in owned]
+                pending_since = min(pending) if pending else None
+            snapshot = collect(BankClient(), config, state_dir, pending_since=pending_since)
+    firefly = firefly or FireflyClient()
     accounts = firefly.all("/accounts?type=asset")
     groups = firefly.all("/transactions?type=all")
     refs_file = state_dir / "references.json"
@@ -678,9 +782,11 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
                      read_json(refs_file) if refs_file.exists() else None)
     save_json(state_dir / "last-plan.json", plan)
     if command in {"plan", "backfill-plan"}:
-        return {"accounts": len(plan["targets"]), "openings": len(plan["openings"]),
-                "actions": {a: sum(o["action"] == a for o in plan["operations"])
-                            for a in ("create", "update", "reuse")}}
+        actions = {a: sum(o["action"] == a for o in plan["operations"])
+                   for a in ("create", "update", "reuse")}
+        if plan["authorization_voids"]:
+            actions["void"] = len(plan["authorization_voids"])
+        return {"accounts": len(plan["targets"]), "openings": len(plan["openings"]), "actions": actions}
     backup_dir = state_dir / "backups"
     backup_dir.mkdir(mode=0o700, exist_ok=True)
     save_json(backup_dir / f"before-{time.time_ns()}.json", {

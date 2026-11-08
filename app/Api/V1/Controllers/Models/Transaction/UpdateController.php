@@ -77,6 +77,16 @@ final class UpdateController extends Controller
      */
     public function update(UpdateRequest $request, TransactionGroup $transactionGroup): JsonResponse
     {
+        if ($request->headers->has('If-Match-Bank-Authorization')) {
+            return \FireflyIII\Support\Reports\BankAuthorizationMutation::update($request, $transactionGroup,
+                fn (TransactionGroup $locked): JsonResponse => $this->performUpdate($request, $locked));
+        }
+
+        return $this->performUpdate($request, $transactionGroup);
+    }
+
+    private function performUpdate(UpdateRequest $request, TransactionGroup $transactionGroup): JsonResponse
+    {
         if ($request->headers->has('If-Match-Tags')) {
             return \FireflyIII\Support\Reports\PaymentTagsUpdate::update($request, $transactionGroup);
         }

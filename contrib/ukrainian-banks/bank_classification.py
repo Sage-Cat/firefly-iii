@@ -80,11 +80,14 @@ def _refund_journals(link_types, links):
 
 
 def _ordinary(journal, assets, refund_ids):
+    from monobank_authorizations import managed_pending
+    if note_object(journal.get('notes')).get('monobank_authorization_review'):
+        return False
     kind = journal.get("type")
     provider = journal.get("internal_reference")
     if (kind not in {"deposit", "withdrawal"} or provider not in PROVIDERS
             or not str(journal.get("external_id", "")).startswith(provider + ":")
-            or not settled(journal) or positive_amount(journal) is None or date_of(journal) is None
+            or not (settled(journal) or managed_pending(journal)) or positive_amount(journal) is None or date_of(journal) is None
             or str(journal.get("transaction_journal_id")) in refund_ids
             or journal.get("category_name") == "Повернення коштів"):
         return False
