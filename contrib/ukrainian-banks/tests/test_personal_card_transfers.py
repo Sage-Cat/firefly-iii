@@ -53,9 +53,11 @@ class InternalCardsTest(unittest.TestCase):
         self.rows.append({'key': 'debit', 'C': '****1111', 'account': '1', 'F': 'UAH', 'E': '-100.00', 'I': '50.00',
                           'B': 'Переказ на свою картку', 'D': 'На свою картку *2222', 'date': '2026-11-08T03:09:35+02:00'})
         self.cards['****1111']['closing'] = '50.00'
-        rows, cards = self.prepared()
-        self.assertEqual([r['key'] for r in rows if r.get('internal_card_transfer')], ['credit', 'debit'])
-        self.assertEqual(cards['****1111']['closing'], '50.00')
+        for bank_category in ['Переказ на свою картку', 'Перекази']:
+            self.rows[-1]['B'] = bank_category
+            rows, cards = self.prepared()
+            self.assertEqual([r['key'] for r in rows if r.get('internal_card_transfer')], ['credit', 'debit'])
+            self.assertEqual(cards['****1111']['closing'], '50.00')
 
     def test_conflicting_bank_proof_is_rejected(self):
         for field, value in [('amount', '99.00'), ('source_balance', '49.00'), ('source_previous_key', 'missing'),
