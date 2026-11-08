@@ -170,7 +170,7 @@
                                             <div class="progress-bar bg-danger"></div>
                                         </div>
                                         <div class="progress progress-blue" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">
-                                            <div class="progress-bar bg-info"></div>
+                                            <div class="progress-bar bg-danger"></div>
                                         </div>
                                     </div>
                                 </div>
