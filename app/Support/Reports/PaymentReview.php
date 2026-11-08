@@ -296,6 +296,9 @@ final class PaymentReview
         ) {
             $reviewError = 'Рух на уточненні не відповідає банківському рахунку. Потрібна звірка.';
         }
+        if ($pending && 'same_asset_cards' === ($review['account_scope'] ?? null)) {
+            $reviewError = 'Це переказ між картками, об’єднаними в один рахунок. Для звірки потрібна оновлена виписка картки, з якої надійшли кошти.';
+        }
         $value  = null === $leg ? '0' : (string) $leg->amount;
         $amount = str_starts_with($value, '-') ? substr($value, 1) : $value;
         $state  = self::state($journal);
