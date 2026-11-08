@@ -77,6 +77,47 @@ Keep cashback in a separate account from purchases and refunds. A provider's
 cashback metadata alone does not create a financial movement; import an actual
 cashback payout only when its statement confirms it.
 
+## Confirmed classification rules
+
+Set `"auto_classification": true` in the provider configuration to apply
+private, confirmed metadata rules after closing-balance verification and,
+where enabled, refund synchronization. Configure version 1 rules in
+`.state/bank-classification/config.json`, inside a private `0700` directory.
+`merchant_rules` contain a description or merchant `prefix` and a `category`;
+they match withdrawals only. `income_rules` select an owned `destination_id`
+or a `description_prefix`, plus a `category` and optional `tag`; they match
+external deposits only. Prefixes respect word boundaries and ignore case and
+repeated whitespace. Rules and account bindings belong to each installation.
+
+Classification preserves manual categories and existing tags, skips ambiguous
+rules, refunds, unsettled records and unresolved own transfers, and never
+creates financial movements. Category writes use `If-Match-Category`.
+Additive tag writes merge the freshly read list and use `If-Match-Tags` with
+the expected category; concurrent owner changes return 409. Both conditional
+paths disable rules and webhooks and leave amounts, dates, budgets and notes
+unchanged. Cashback rules classify only the actual net payout and may add a
+cashback tag; estimated bonuses and gross/tax adjustments are not synthesized.
+
+## Physical cards sharing one asset
+
+Personal imports may include explicitly confirmed `internal_card_transfers`
+when two physical cards map to one asset account. Confirmations bind an exact
+credit key, card suffixes, currency, amount, minute, prior source key and
+source balance to a bank-evidence SHA-256 digest. Keep these confirmations and
+their source evidence private. Without matching evidence, the movement stays
+in payment review awaiting a newer source-card statement.
+
+The planner consumes both card legs once, or validates the missing source
+debit against the confirmed closing balance. It records versioned evidence
+in a raw `firefly-internal-cards:v1` HTML comment in account notes, preserving
+unrelated notes and the `BalanceHistory` comment byte-for-byte. Note writes
+use `If-Match-Notes`; retiring earlier technical suspense staging uses
+`If-Match-Internal-Card`. The native API locks and checks the complete journal
+snapshot and its relationships before soft deletion. Changed or categorized
+staging is preserved for review. This reconciliation creates no income or
+expense, and a later matching source-card debit is consumed without a second
+movement.
+
 ## Balance valuation history
 
 `capital_history.py plan` reads private Sheets values/formulas plus account

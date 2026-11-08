@@ -76,3 +76,11 @@ chart markup. These source checks do not replace a browser layout check.
 With `FIREFLY_TEST_APP_ROOT` set, only Composer dependencies and application
 bootstrap come from that installation; checked source and views stay in this
 repository.
+
+`conditional_tags_update.php` verifies additive tags, concurrent tag/category
+changes, owner scope, preserved financial fields and the native controller's
+guard ordering. `internal_card_delete.php` exercises conditional retirement of
+technical same-asset card staging, complete snapshot checks, lock coverage,
+rollback, native soft deletion and ordinary DELETE behavior. Both use isolated
+in-memory SQLite fixtures. Cross-language Python fixtures verify the exact
+fingerprints used by the native API.
