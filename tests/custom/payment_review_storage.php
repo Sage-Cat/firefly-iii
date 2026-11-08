@@ -283,4 +283,20 @@ verify(
     'Controller did not queue the owner decision.'
 );
 verify(financialState() === $beforeController, 'Successful forms mutated financial rows.');
+fixtureJournal(11, true);
+$cardNote                                 = DB::table('notes')->where('noteable_id', 11)->value('text');
+$cardNote                                 = json_decode($cardNote, true);
+$cardNote['bank_review']['account_scope'] = 'same_asset_cards';
+DB::table('notes')
+    ->where('noteable_id', 11)
+    ->update(['text' => json_encode($cardNote)]);
+$cardJournal = TransactionJournal::with(['transactions.account', 'notes', 'categories', 'transactionType', 'transactionCurrency'])->findOrFail(11);
+$cardRow     = PaymentReview::row($cardJournal, PaymentReview::accounts($user));
+verify($cardRow['eligible'] && $cardRow['pending'] && $cardRow['blocked'], 'Aggregated card movement must stay visible for reconciliation.');
+verify(str_contains($cardRow['review_error'], 'оновлена виписка'), 'Missing source-card evidence must be explained in the queue.');
+$beforeCard = financialState();
+foreach ([['action' => 'external', 'category_id' => '1'], ['action' => 'transfer', 'account_id' => '2']] as $choice) {
+    rejected(static fn() => PaymentReview::save($user, 11, ['fingerprint' => tokenFor(11)] + $choice), InvalidArgumentException::class);
+}
+verify(financialState() === $beforeCard, 'An unresolved internal card movement must not become income or spending.');
 echo 'Passed ' . $checks . " isolated SQLite review storage checks.\n";
