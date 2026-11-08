@@ -12,7 +12,8 @@ namespace FireflyIII\Models {
 }
 
 namespace {
-    require dirname(__DIR__, 2) . '/vendor/autoload.php';
+    $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    require $fixtureAppRoot . '/vendor/autoload.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ReportingCurrency.php';
 

@@ -61,6 +61,7 @@ namespace FireflyIII\Support\Facades {
 }
 
 namespace {
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ReportingSubscriptions.php';
     use Carbon\Carbon;

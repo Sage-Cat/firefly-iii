@@ -81,7 +81,9 @@ namespace {
         return $key;
     }
 
-    require dirname(__DIR__, 2) . '/vendor/autoload.php';
+    $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    require $fixtureAppRoot . '/vendor/autoload.php';
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ReportingSubscriptions.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/NetWorthSeries.php';
@@ -408,6 +410,37 @@ namespace {
     check(
         DashboardCards::rows($bills, $start, $end)['net-worth-in-EUR']['monetary_value'] === '0.01',
         'Sub-cent account values are combined before rounding the portfolio.'
+    );
+    $bills->rows                     = [new Bill(false, '125', '125', 'UAH', 0, ['refund-charge'])];
+    $budgets->rows                   = [(object) ['id' => '10']];
+    $limits->rows                    = ['10' => [limit('refund-limit', '1000')]];
+    $refundLeg                       = leg('refund-credit', 'uah', 'UAH', '125', 'Deposit');
+    $refundLeg['is_refund']          = true;
+    $refundLeg['refund_original_id'] = 'refund-charge';
+    $refundLeg['refund_budget_ids']  = ['10'];
+    DashboardLedger::$fixture        = [
+        'accounts' => ['uah' => account('uah', 'UAH')],
+        'legs'     => [
+            leg('refund-opening', 'uah', 'UAH', '1000', 'Opening balance', '2026-09-01'),
+            leg('refund-charge', 'uah', 'UAH', '-125', 'Withdrawal', '2026-11-03', ['10']),
+            $refundLeg
+        ]
+    ];
+    $refundBefore = serialize(DashboardLedger::$fixture);
+    $refundedRows = DashboardCards::rows($bills, $start, $end);
+    check(
+        $refundedRows['spent-in-UAH']['monetary_value'] === '0.00' && $refundedRows['earned-in-UAH']['monetary_value'] === '0.00',
+        'The homepage treats a refund as expense credit, never new income.'
+    );
+    check($refundedRows['left-to-spend-in-UAH']['monetary_value'] === '1000.00', 'Refund reverses its original budget expense once.');
+    check($refundedRows['bills-paid-in-UAH']['monetary_value'] === '0.00', 'Refund reverses actual paid subscription spending.');
+    check($refundedRows['net-worth-in-EUR']['monetary_value'] === '20.00', 'Capital retains both unchanged bank movements.');
+    check(serialize(DashboardLedger::$fixture) === $refundBefore, 'Refund reporting does not rewrite ledger amounts.');
+    DashboardLedger::$fixture['legs'][1]['budget_ids']        = [];
+    DashboardLedger::$fixture['legs'][2]['refund_budget_ids'] = [];
+    check(
+        DashboardCards::rows($bills, $start, $end)['left-to-spend-in-UAH']['monetary_value'] === '1000.00',
+        'A previously cleared full-refund budget does not receive a second credit.'
     );
     echo "Passed {$checks} dashboard card checks.\n";
 }

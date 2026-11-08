@@ -72,7 +72,9 @@ namespace {
         return new \Illuminate\View\View($name, $data);
     }
 
-    require dirname(__DIR__, 2) . '/vendor/autoload.php';
+    $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    require $fixtureAppRoot . '/vendor/autoload.php';
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ProfitSummary.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
     require dirname(__DIR__, 2) . '/app/Http/Controllers/ProfitReportController.php';
@@ -262,7 +264,8 @@ namespace {
         public function setUser($user) {}
     };
     $collector = new class {
-        public array $types = [];
+        public array $types         = [];
+        public bool  $includeRefund = false;
 
         public function getExtractedJournals(): array
         {
@@ -276,6 +279,10 @@ namespace {
                 row('internal', '2026-11-07', '-999', 'Withdrawal', 'owned', 'second')
             ];
 
+            if ($this->includeRefund) {
+                $rows[] = row('authorization', '2026-11-07', '-3');
+                $rows[] = row('cancelled', '2026-11-07', '3', 'Deposit', 'revenue', 'owned') + ['category_name' => 'Повернення коштів'];
+            }
             return array_map(static fn($row) => [
                 'transaction_journal_id' => $row['id'],
                 'date'                   => Carbon::parse($row['day'], 'Europe/Kyiv'),
@@ -283,7 +290,8 @@ namespace {
                 'source_account_id'      => $row['source_id'],
                 'destination_account_id' => $row['destination_id'],
                 'currency_code'          => $row['currency'],
-                'amount'                 => $row['amount']
+                'amount'                 => $row['amount'],
+                'category_name'          => $row['category_name'] ?? null
             ], $rows);
         }
 
@@ -304,6 +312,11 @@ namespace {
         }
 
         public function withAccountInformation(): self
+        {
+            return $this;
+        }
+
+        public function withCategoryInformation(): self
         {
             return $this;
         }
@@ -400,6 +413,22 @@ namespace {
             && $data['weeklyEnd']->format('Y-m-d') === $today
             && $data['valuationDay']->format('Y-m-d') === $today,
             'The rolling weekly range must subtract three months without overflow, add one day, and preserve today across leap and year boundaries.'
+        );
+    }
+    ReportingCurrency::$day   = '2026-11-07';
+    $collector->includeRefund = true;
+    foreach ([
+        'UAH' => ['income' => '5000.00', 'chart' => '1500.00', 'monthly' => '1750.00', 'weekly' => '2100.00'],
+        'EUR' => ['income' => '100.00', 'chart' => '30.00', 'monthly' => '35.00', 'weekly' => '42.00']
+    ] as $currency => $expected) {
+        $data = new ProfitReportController()->index(new ProfitRequest(['currency' => $currency]))->data;
+        check(
+            $data['summary']['totals']['income'] === $expected['income'] && $data['summary']['totals']['expenses'] === $expected['chart'],
+            'The real controller propagates explicit refund categories to daily profit.'
+        );
+        check(
+            $data['monthlySummary']['totals']['expenses'] === $expected['monthly'] && $data['weeklySummary']['totals']['expenses'] === $expected['weekly'],
+            'Monthly and weekly controller summaries net the same cancellation.'
         );
     }
     echo 'Passed ' . $checks . " profit period checks.\n";

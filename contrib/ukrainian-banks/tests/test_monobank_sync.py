@@ -193,6 +193,23 @@ class SyncTests(unittest.TestCase):
         with self.assertRaisesRegex(sync.Deferred, "opening balance was changed"):
             self.plan(ledger, sync.read_json(self.state / "baseline.json"))
 
+    def test_opted_in_refunds_run_after_bank_balance_verification(self):
+        self.config["auto_refunds"] = True
+        ledger = Ledger(self.accounts)
+        sync.save_json(self.state / "config.json", self.config)
+        sync.save_json(self.state / "snapshot.json", self.snapshot)
+        def reconcile(client, state):
+            self.assertIs(client, ledger)
+            self.assertEqual("17300.00", ledger.accounts[0]["attributes"]["current_balance"])
+            self.assertEqual(2, len(ledger.groups))
+            return {"classified": 0, "links_created": 0}
+        with patch.object(sync, "FireflyClient", return_value=ledger), patch.object(sync, "ensure_rates"), \
+             patch("bank_refunds.synchronize", side_effect=reconcile) as hook:
+            result = sync.run("sync", True, self.state)
+        self.assertEqual(1, hook.call_count)
+        self.assertEqual({"classified": 0, "links_created": 0}, result["refunds"])
+        self.assertTrue(sync.read_json(self.state / "active-state.json")["config"]["auto_refunds"])
+
     def test_unknown_own_transfer_becomes_uncategorized_review(self):
         import json
         self.config["approved_transfers"] = {}

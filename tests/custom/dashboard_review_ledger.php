@@ -2,6 +2,21 @@
 
 declare(strict_types=1);
 
+namespace FireflyIII\Support\Reports {
+    final class RefundProjection
+    {
+        public static function annotate(array $rows, array $metadata): array
+        {
+            return $rows;
+        }
+
+        public static function metadata($user): array
+        {
+            return [];
+        }
+    }
+}
+
 namespace FireflyIII\Models {
     final class Transaction
     {
@@ -103,7 +118,8 @@ namespace {
                 'id'              => $id,
                 'date'            => Carbon::parse($day, 'Europe/Kyiv'),
                 'transactionType' => (object) ['type' => $type],
-                'budgets'         => new Collection()
+                'budgets'         => new Collection(),
+                'categories'      => new Collection()
             ]
         ];
     }

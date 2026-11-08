@@ -51,7 +51,7 @@ namespace FireflyIII\Support\Reports {
 }
 
 namespace {
-    function auth()
+    function auth(): object
     {
         return new class {
             public function user(): object
@@ -61,7 +61,9 @@ namespace {
         };
     }
 
-    require dirname(__DIR__, 2) . '/vendor/autoload.php';
+    $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    require $fixtureAppRoot . '/vendor/autoload.php';
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/BudgetProjection.php';
 
     use Carbon\Carbon;
@@ -457,6 +459,7 @@ namespace {
         'Coverage expansion does not change the selected monthly range.'
     );
 
+    require dirname(__DIR__, 2) . '/app/Api/V1/Controllers/Summary/BasicController.php';
     $summary     = new \ReflectionClass(\FireflyIII\Api\V1\Controllers\Summary\BasicController::class)->newInstanceWithoutConstructor();
     $leftToSpend = new \ReflectionMethod($summary, 'getLeftToSpendInfo');
     check(

@@ -172,6 +172,20 @@ namespace Illuminate\Support {
             return [] === $this->items;
         }
 
+        public function pluck(string $key): object
+        {
+            return new class(array_map(static fn($item) => $item->$key, $this->items)) {
+                public function __construct(
+                    private array $values
+                ) {}
+
+                public function all(): array
+                {
+                    return $this->values;
+                }
+            };
+        }
+
         public function push(object $item): static
         {
             $this->items[] = $item;
@@ -244,6 +258,11 @@ namespace {
                 public function getAccountsByType(array $types): object
                 {
                     return new class {
+                        public function filter($callback): static
+                        {
+                            return $this;
+                        }
+
                         public function isEmpty(): bool
                         {
                             return [] === $GLOBALS['assetIds'];
@@ -291,6 +310,7 @@ namespace {
         throw new \RuntimeException('The empty-asset guard allowed another dependency: ' . $name);
     }
 
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require getenv('EXPENSE_HELPER') ?: dirname(__DIR__, 2) . '/app/Support/Reports/ExpenseProjection.php';
 
     function check(bool $condition, string $message): void
