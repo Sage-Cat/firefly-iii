@@ -31,8 +31,9 @@ selected collaborators and do not require a database or user state.
 The reporting profile presents expenses and budgets in UAH, profit in the
 selected UAH or EUR currency, and the net-worth card and daily history in EUR.
 The other dashboard cards retain their original currencies. Net worth uses
-the report-day NBU UAH bridge and rounds the combined portfolio once; tokens
-without an NBU quote retain the stored manual valuation.
+the report-day NBU UAH bridge and rounds the combined portfolio once.
+USDT follows the explicit 1:1 USD valuation convention via the NBU UAH bridge;
+stale stored USDT quotes cannot override the USD reference.
 The monthly table covers the current calendar month through today and the
 previous two months; the weekly table covers a rolling three-month window.
 Both remain independent of chart dates and stack in the right-hand column.

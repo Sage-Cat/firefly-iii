@@ -28,8 +28,9 @@ Start with `python3 monobank_sync.py plan` or
 using the corresponding `sync` command. Ambiguous transfers, missing rates,
 and unexplained balance differences defer the import. Personal XLSX imports
 support planning only. NBU reporting targets are UAH and EUR; supported fiat
-sources are UAH, EUR, USD, and CHF. Token valuations require explicit dated
-rates rather than an assumed currency peg.
+sources are UAH, EUR, USD, and CHF. USDT explicitly follows the profile convention of 1 USDT = 1 USD, using
+dated NBU USD quotes for UAH and EUR valuation. This is a USD proxy, not
+an official NBU stablecoin quote. Historical rate writes use bounded batches.
 
 ## Balance valuation history
 
