@@ -73,7 +73,7 @@ def read_statement(path):
 
 
 def collect_sources(config):
-    rows, cards, coverage = {}, {}, []
+    rows, cards, coverage, statements = {}, {}, [], defaultdict(list)
     for source in config["sources"]:
         statement = read_statement(source["path"])
         if not statement["rows"]:
@@ -85,14 +85,56 @@ def collect_sources(config):
         binding = {"account": str(source["account_id"]), "currency": first["F"],
                    "start": statement["start"], "opening": amount(money(first["I"]) - money(first["E"])),
                    "closing": amount(money(last["I"]))}
-        if card in cards and cards[card] != binding:
-            raise Deferred("Overlapping statements disagree; reconcile before importing")
+        if card in cards and any(cards[card][field] != binding[field] for field in ("account", "currency")):
+            raise Deferred("Statement card has conflicting account or currency mappings")
         cards[card] = binding
         for row in statement["rows"]:
             if row["C"] != card or row["F"] != binding["currency"]:
                 raise Deferred("Mixed statement accounts are not supported")
-            rows[row["key"]] = dict(row, account=binding["account"])
+        statements[card].append(statement)
         coverage.append({"start": statement["start"], "end": statement["end"], "rows": len(statement["rows"])})
+    for card, sources in statements.items():
+        sources.sort(key=lambda statement: (statement["start"], statement["end"]))
+        merged, end = [], None
+        for statement in sources:
+            incoming = list(reversed(statement["rows"]))
+            if end is None:
+                merged = incoming
+            else:
+                if (datetime.fromisoformat(statement["start"]) - datetime.fromisoformat(end)).days > 1:
+                    raise Deferred("Statement coverage has a gap")
+                overlap_end = min(end, statement["end"])
+                previous_overlap = [row for row in merged
+                                    if statement["start"] <= row["date"][:10] <= overlap_end]
+                incoming_overlap = [row for row in incoming
+                                    if statement["start"] <= row["date"][:10] <= overlap_end]
+                previous_keys = [row["key"] for row in previous_overlap]
+                incoming_keys = [row["key"] for row in incoming_overlap]
+                if previous_keys != incoming_keys:
+                    # An earlier export may stop partway through its final declared day.
+                    if end == statement["end"]:
+                        raise Deferred("Overlapping statements disagree; reconcile before importing")
+                    if end < statement["end"]:
+                        known, extended, closing = previous_overlap, incoming_overlap, merged[-1]
+                    else:
+                        known, extended, closing = incoming_overlap, previous_overlap, incoming[-1]
+                    tail = extended[len(known):]
+                    if ([row["key"] for row in extended[:len(known)]] != [row["key"] for row in known]
+                            or any(row["date"][:10] != overlap_end or row["date"] <= closing["date"]
+                                   for row in tail)):
+                        raise Deferred("Overlapping statements disagree; reconcile before importing")
+                    if end < statement["end"]:
+                        merged.extend(tail)
+                merged.extend(row for row in incoming if row["date"][:10] > end)
+            end = max(end or statement["end"], statement["end"])
+        for older, newer in zip(merged, merged[1:]):
+            if newer["date"] < older["date"] or money(newer["I"]) - money(newer["E"]) != money(older["I"]):
+                raise Deferred("Merged statement balance chain does not reconcile")
+        cards[card].update(start=sources[0]["start"],
+                           opening=amount(money(merged[0]["I"]) - money(merged[0]["E"])),
+                           closing=amount(money(merged[-1]["I"])))
+        for row in merged:
+            rows[row["key"]] = dict(row, account=cards[card]["account"])
     return sorted(rows.values(), key=lambda r: (r["date"], r["key"])), cards, coverage
 
 
