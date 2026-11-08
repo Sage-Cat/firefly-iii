@@ -110,6 +110,72 @@ check(
 $annual = ProfitSummary::build([], [], [], '2025-12-01', '2026-11-07', 'EUR');
 check(count($annual['points']) === 12 && !$annual['daily'], 'The year preset must produce 12 aggregate monthly buckets.');
 check($annual['points'][0]['period'] === '2025-12' && $annual['points'][11]['period'] === '2026-11', 'Calendar buckets must preserve the year boundary.');
-check(array_keys($annual['points'][0]) === ['period', 'income', 'expenses', 'net'], 'No per-account series may appear in the report.');
+check(array_keys($annual['points'][0]) === ['period', 'income', 'expenses', 'net', 'cumulative_net'], 'No per-account series may appear in the report.');
+
+$timeline = [
+    journal('later-expense', 'Withdrawal', '-20', 'EUR', '2026-11-04'),
+    journal('large-income', 'Deposit', '-1000', 'EUR', '2026-11-03', 'revenue', '1'),
+    journal('before-period', 'Deposit', '-9999', 'EUR', '2026-10-31', 'revenue', '1'),
+    journal('first-expense', 'Withdrawal', '-10', 'EUR', '2026-11-01'),
+    journal('same-day-expense', 'Withdrawal', '-5', 'EUR', '2026-11-04'),
+    journal('refund', 'Deposit', '5', 'EUR', '2026-11-06', 'merchant', '1') + ['category_name' => 'Повернення коштів'],
+    journal('after-period', 'Withdrawal', '-9999', 'EUR', '2026-11-08')
+];
+foreach ([
+    'EUR' => ['-10.00', '-10.00', '990.00', '965.00', '965.00', '970.00', '970.00'],
+    'UAH' => ['-500.00', '-500.00', '49500.00', '48250.00', '48250.00', '48500.00', '48500.00']
+] as $currency => $expected) {
+    $chart = ProfitSummary::build($timeline, $rates, ['1'], '2026-11-01', '2026-11-07', $currency);
+    check(
+        array_column($chart['points'], 'cumulative_net') === $expected,
+        'The result line must carry income forward, change only by subsequent flows, and include refunds in both currencies.'
+    );
+    check($chart['points'][6]['cumulative_net'] === $chart['totals']['net'], 'The final chart point must equal the selected period result.');
+    check(
+        $chart['points'][4]['income'] === '0.00' && $chart['points'][4]['expenses'] === '0.00' && $chart['points'][4]['net'] === '0.00',
+        'Daily bars and table net must remain daily, including empty days.'
+    );
+    $partial = ProfitSummary::build($timeline, $rates, ['1'], '2026-11-04', '2026-11-07', $currency);
+    check(
+        $partial['points'][0]['cumulative_net'] === ('EUR' === $currency ? '-25.00' : '-1250.00')
+        && $partial['points'][3]['cumulative_net'] === ('EUR' === $currency ? '-20.00' : '-1000.00'),
+        'Changing the selected start must reset accumulation instead of carrying earlier income into the range.'
+    );
+}
+$monthlyLine = ProfitSummary::build(
+    [
+        journal('year-income', 'Deposit', '-100', 'EUR', '2025-12-31', 'revenue', '1'),
+        journal('year-expense', 'Withdrawal', '-30', 'EUR', '2026-01-02')
+    ],
+    [],
+    ['1'],
+    '2025-12-01',
+    '2026-02-28',
+    'EUR'
+);
+check(
+    array_column($monthlyLine['points'], 'cumulative_net') === ['100.00', '70.00', '70.00'],
+    'Long-period charts must accumulate across monthly buckets and year boundaries.'
+);
+check(
+    array_column($monthlyLine['points'], 'net') === ['100.00', '-30.00', '0.00'],
+    'Monthly table results must stay independent of the accumulated chart line.'
+);
+$cents = ProfitSummary::build(
+    [
+        journal('cent-income', 'Deposit', '-0.10', 'EUR', '2026-11-01', 'revenue', '1'),
+        journal('cent-income-2', 'Deposit', '-0.20', 'EUR', '2026-11-02', 'revenue', '1'),
+        journal('cent-expense', 'Withdrawal', '-0.30', 'EUR', '2026-11-03')
+    ],
+    [],
+    ['1'],
+    '2026-11-01',
+    '2026-11-03',
+    'EUR'
+);
+check(
+    array_column($cents['points'], 'cumulative_net') === ['0.10', '0.30', '0.00'],
+    'Accumulation must preserve exact decimal cents without floating-point drift.'
+);
 
 echo 'Passed ' . $checks . " profit report checks.\n";
