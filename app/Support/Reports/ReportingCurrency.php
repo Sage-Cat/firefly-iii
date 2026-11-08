@@ -25,7 +25,7 @@ final class ReportingCurrency
             $target = 'UAH' === $request->query('currency', 'UAH') ? 'UAH' : 'EUR';
         }
 
-        return 'uah-bridge-usd-proxy-v2:' . self::today()->format('Y-m-d') . ':' . $target;
+        return 'uah-bridge-refunds-v3:' . self::today()->format('Y-m-d') . ':' . $target;
     }
 
     public static function convert(string $amount, string $from, string $to): string
@@ -162,6 +162,7 @@ final class ReportingCurrency
                 ->setAccounts($assets)
                 ->setTypes(['Deposit', 'Withdrawal'])
                 ->withAccountInformation()
+                ->withCategoryInformation()
                 ->getExtractedJournals();
             foreach ($set as $journal) {
                 $rows[] = [
@@ -171,10 +172,12 @@ final class ReportingCurrency
                     'source_id'      => $journal['source_account_id'],
                     'destination_id' => $journal['destination_account_id'],
                     'currency'       => $journal['currency_code'],
-                    'amount'         => (string) $journal['amount']
+                    'amount'         => (string) $journal['amount'],
+                    'category_name'  => $journal['category_name'] ?? null
                 ];
             }
         }
+        $rows        = RefundProjection::annotate($rows, RefundProjection::metadata(auth()->user()));
         $parameters  = [$rows, self::quotes(), $assets->pluck('id')->all(), $start->format('Y-m-d'), $end->format('Y-m-d')];
         $eur         = ProfitSummary::build(...[...$parameters, 'EUR']);
         $uah         = ProfitSummary::build(...[...$parameters, 'UAH']);

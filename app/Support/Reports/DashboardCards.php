@@ -24,7 +24,7 @@ final class DashboardCards
             }
             $currency               = $leg['currency'];
             $flow[$currency]        ??= ['earned' => '0', 'spent' => '0'];
-            $kind                   = 'Deposit' === $leg['type'] ? 'earned' : 'spent';
+            $kind                   = 'Deposit' === $leg['type'] && !RefundProjection::isRefund($leg) ? 'earned' : 'spent';
             $flow[$currency][$kind] = bcadd($flow[$currency][$kind], $leg['amount'], 32);
         }
         $rows = [];
@@ -74,10 +74,10 @@ final class DashboardCards
         }
         $spent = [];
         foreach ($external as $leg) {
-            if ('Withdrawal' !== $leg['type'] || !isset($caps[$leg['currency']])) {
+            if ('Withdrawal' !== $leg['type'] && !RefundProjection::isRefund($leg) || !isset($caps[$leg['currency']])) {
                 continue;
             }
-            foreach ($leg['budget_ids'] as $budgetId) {
+            foreach (RefundProjection::isRefund($leg) ? $leg['refund_budget_ids'] ?? [] : $leg['budget_ids'] as $budgetId) {
                 foreach ($coverage[(string) $budgetId][$leg['currency']] ?? [] as [$first, $last]) {
                     // Include the complete overlapping limit, including its earlier months.
                     if ($leg['day'] >= $first && $leg['day'] <= $last || $leg['day'] >= $start->format('Y-m-d') && $leg['day'] <= $end->format('Y-m-d')) {

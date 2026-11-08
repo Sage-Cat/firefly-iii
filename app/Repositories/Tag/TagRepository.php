@@ -234,6 +234,7 @@ class TagRepository implements TagRepositoryInterface, UserGroupInterface
                 'foreign_currencies.decimal_places as foreign_currency_decimal_places',
 
                 // fields
+                'transaction_journals.id as transaction_journal_id',
                 'transaction_journals.date',
                 'transaction_types.type',
                 'transaction_journals.transaction_currency_id',

@@ -35,9 +35,13 @@ final class ReportingSubscriptions
                 $withdrawals[(string) $id] = $leg;
             }
         }
-        $sums = [];
-        $paid = [];
+        $sums    = [];
+        $paid    = [];
+        $billIds = [];
         foreach ($repository->getBills() as $bill) {
+            if (isset($bill->id)) {
+                $billIds[(string) $bill->id] = true;
+            }
             $code        = $bill->transactionCurrency->code;
             $sums[$code] ??= ['paid' => '0', 'unpaid' => '0'];
             $counted     = [];
@@ -61,6 +65,23 @@ final class ReportingSubscriptions
                 $average               = bcdiv(bcadd((string) $bill->amount_min, (string) $bill->amount_max, 32), '2', 32);
                 $sums[$code]['unpaid'] = bcsub($sums[$code]['unpaid'], bcmul($average, (string) $left, 32), 32);
             }
+        }
+        foreach ($journals as $id => $legs) {
+            if (1 !== count($legs)) {
+                continue;
+            }
+            $leg = reset($legs);
+            if (
+                !RefundProjection::isRefund($leg)
+                || bccomp($leg['amount'], '0', 32) <= 0
+                || $leg['day'] < $start->format('Y-m-d')
+                || $leg['day'] > $end->format('Y-m-d')
+                || !isset($paid[(string) ($leg['refund_original_id'] ?? '')]) && !isset($billIds[(string) ($leg['refund_bill_id'] ?? '')])
+            ) {
+                continue;
+            }
+            $sums[$leg['currency']]         ??= ['paid' => '0', 'unpaid' => '0'];
+            $sums[$leg['currency']]['paid'] = bcsub($sums[$leg['currency']]['paid'], $leg['amount'], 32);
         }
         $rows = [];
         foreach ($sums as $code => $values) {
@@ -91,9 +112,14 @@ final class ReportingSubscriptions
         $accounts->setUser(auth()->user());
         $owned = array_fill_keys(array_map('strval', $accounts->getAccountsByType(config('firefly.accountTypesByIdentifier.asset'))->pluck('id')->all()), true);
 
-        $paid   = '0.00';
-        $unpaid = '0.00';
+        $paid    = '0.00';
+        $unpaid  = '0.00';
+        $paidIds = [];
+        $billIds = [];
         foreach ($repository->getBills() as $bill) {
+            if (isset($bill->id)) {
+                $billIds[(string) $bill->id] = true;
+            }
             $count    = 0;
             $journals = $bill->transactionJournals()->whereHas('transactionGroup')->after($start->copy()->subDay())->before($end->copy()->addDay())->get();
             foreach ($journals as $journal) {
@@ -105,6 +131,9 @@ final class ReportingSubscriptions
                 if (null === $leg || !isset($owned[(string) $leg->account_id])) {
                     continue;
                 }
+                if (isset($journal->id)) {
+                    $paidIds[(string) $journal->id] = true;
+                }
                 $paid = bcadd($paid, ReportingCurrency::convert(ltrim((string) $leg->amount, '-'), $leg->transactionCurrency->code, 'UAH'), 2);
                 ++$count;
             }
@@ -115,6 +144,15 @@ final class ReportingSubscriptions
                     $unit    = ReportingCurrency::convert($average, $bill->transactionCurrency->code, 'UAH');
                     $unpaid  = bcadd($unpaid, bcmul($unit, (string) $left, 2), 2);
                 }
+            }
+        }
+        foreach (RefundProjection::metadata(auth()->user()) as $refund) {
+            if (
+                $refund['day'] >= $start->format('Y-m-d')
+                && $refund['day'] <= $end->format('Y-m-d')
+                && (isset($paidIds[$refund['original_id']]) || isset($billIds[(string) ($refund['bill_id'] ?? '')]))
+            ) {
+                $paid = bcsub($paid, ReportingCurrency::convert($refund['amount'], $refund['currency'], 'UAH'), 2);
             }
         }
         $result = [];

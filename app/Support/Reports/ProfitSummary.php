@@ -82,8 +82,12 @@ final class ProfitSummary
                 $manual[$code] = true;
             }
             // The same current UAH bridge is used for every selected period.
-            $amount                = CurrencyBridge::convert($amount, $code, $currency, $rates);
-            $bucket                = 'Deposit' === $type ? 'income' : 'expenses';
+            $amount = CurrencyBridge::convert($amount, $code, $currency, $rates);
+            $refund = RefundProjection::isRefund($journal);
+            $bucket = 'Deposit' === $type && !$refund ? 'income' : 'expenses';
+            if ($refund) {
+                $amount = bcsub('0', $amount, 2);
+            }
             $key                   = $date->format($format);
             $points[$key][$bucket] = bcadd($points[$key][$bucket], $amount, 2);
             $total[$bucket]        = bcadd($total[$bucket], $amount, 2);

@@ -54,7 +54,7 @@ final class DashboardLedger
             $rows = Transaction::query()
                 ->whereIn('account_id', array_keys($accounts))
                 ->whereHas('transactionJournal', static fn($query) => $query->where('user_group_id', $user->user_group_id)->whereHas('transactionGroup'))
-                ->with(['transactionJournal.transactionType', 'transactionJournal.budgets', 'transactionCurrency'])
+                ->with(['transactionJournal.transactionType', 'transactionJournal.budgets', 'transactionJournal.categories', 'transactionCurrency'])
                 ->get();
             foreach ($rows as $row) {
                 $journal    = $row->transactionJournal;
@@ -67,14 +67,15 @@ final class DashboardLedger
                     $accounts[$id]['known_from'] = null === $known ? $day : min($known, $day);
                 }
                 $legs[] = [
-                    'id'         => (string) $row->id,
-                    'journal_id' => (string) $journal->id,
-                    'account_id' => $id,
-                    'day'        => $day,
-                    'currency'   => $row->transactionCurrency->code,
-                    'amount'     => (string) $row->amount,
-                    'type'       => $type,
-                    'budget_ids' => $journal->budgets->pluck('id')
+                    'id'            => (string) $row->id,
+                    'journal_id'    => (string) $journal->id,
+                    'account_id'    => $id,
+                    'day'           => $day,
+                    'currency'      => $row->transactionCurrency->code,
+                    'amount'        => (string) $row->amount,
+                    'type'          => $type,
+                    'category_name' => $journal->categories->first()?->name,
+                    'budget_ids'    => $journal->budgets->pluck('id')
                         ->map(static fn($value) => (string) $value)
                         ->all()
                 ];
@@ -87,6 +88,7 @@ final class DashboardLedger
             }
         }
         unset($account);
+        $legs   = RefundProjection::annotate($legs, RefundProjection::metadata($user));
         $result = ['accounts' => $accounts, 'legs' => $legs];
         request()->attributes->set($key, $result);
 

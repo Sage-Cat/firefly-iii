@@ -383,7 +383,12 @@ final class BudgetProjection
         $result   = [];
         $seen     = [];
         foreach ($journals as $journal) {
-            if ('Withdrawal' !== $journal['type'] || !isset($owned[(string) $journal['source_id']]) || isset($owned[(string) $journal['destination_id']])) {
+            $refund     = RefundProjection::isRefund($journal);
+            $withdrawal = 'Withdrawal' === $journal['type']
+            && isset($owned[(string) $journal['source_id']])
+            && !isset($owned[(string) $journal['destination_id']]);
+            $credit = $refund && isset($owned[(string) $journal['destination_id']]) && !isset($owned[(string) $journal['source_id']]);
+            if (!$withdrawal && !$credit) {
                 continue;
             }
             if ($journal['day'] < $start || $journal['day'] > $end) {
@@ -404,7 +409,7 @@ final class BudgetProjection
             }
             $journal['source_amount']   = $raw;
             $journal['source_currency'] = $journal['currency'];
-            $journal['amount']          = ReportingCurrency::convert('-' . ltrim($raw, '-'), $journal['currency'], 'UAH');
+            $journal['amount']          = ReportingCurrency::convert(($refund ? '' : '-') . ltrim($raw, '-'), $journal['currency'], 'UAH');
             $journal['currency']        = 'UAH';
             $result[]                   = $journal;
         }
@@ -529,13 +534,31 @@ final class BudgetProjection
             ->setUser($user)
             ->setAccounts($assets)
             ->setRange($start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay())
-            ->setTypes([TransactionTypeEnum::WITHDRAWAL->value])
+            ->setTypes([TransactionTypeEnum::WITHDRAWAL->value, 'Deposit'])
             ->withAccountInformation()
             ->withBudgetInformation()
             ->withCategoryInformation()
             ->getExtractedJournals();
-        $rows = [];
+        $raw      = RefundProjection::annotate($raw, RefundProjection::metadata($user));
+        $expanded = [];
         foreach ($raw as $journal) {
+            if (RefundProjection::isRefund($journal)) {
+                foreach ($journal['refund_budget_ids'] ?? [] as $budgetId) {
+                    $expanded[] = array_replace($journal, [
+                        'budget_id'     => $budgetId,
+                        'budget_name'   => $journal['refund_budget_names'][$budgetId] ?? '',
+                        'category_name' => $journal['refund_category_name'] ?? $journal['category_name'] ?? null
+                    ]);
+                }
+                if (empty($journal['refund_budget_ids'])) {
+                    $expanded[] = array_replace($journal, ['budget_id' => null]);
+                }
+            } else {
+                $expanded[] = $journal;
+            }
+        }
+        $rows = [];
+        foreach ($expanded as $journal) {
             if ($withoutBudget && !empty($journal['budget_id'])) {
                 continue;
             }
@@ -549,6 +572,7 @@ final class BudgetProjection
                 'budget_name'      => $journal['budget_name'] ?? '',
                 'currency'         => $journal['currency_code'],
                 'amount'           => (string) $journal['amount'],
+                'is_refund'        => RefundProjection::isRefund($journal),
                 'source_name'      => $journal['source_account_name'] ?? '',
                 'destination_name' => $journal['destination_account_name'] ?? '',
                 'category_name'    => $journal['category_name'] ?? trans('firefly.no_category')

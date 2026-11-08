@@ -169,6 +169,9 @@ def synchronize(command, state_dir, cached=False):
         raise Deferred("FOP repeat was not idempotent")
     result = {"finished_at": datetime.now(KYIV).isoformat(), "counts": counts,
               "targets": plan["targets"], "repeat_creates": 0}
+    if config.get("auto_refunds"):
+        from bank_refunds import synchronize as synchronize_refunds
+        result["refunds"] = synchronize_refunds(client, state_dir.parents[1] / "refunds")
     save_json(state_dir / "last-success.json", result)
     return result
 

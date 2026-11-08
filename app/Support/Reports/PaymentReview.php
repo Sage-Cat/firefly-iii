@@ -163,7 +163,12 @@ final class PaymentReview
     /** Recommendations remain choices and never change an imported journal. */
     public static function recommendations(array $payment, array $history, array $categories): array
     {
-        $available   = array_filter($categories, static fn(string $name): bool => self::LEGACY_CATEGORY !== $name);
+        $available = array_filter($categories, static fn(string $name): bool => self::LEGACY_CATEGORY !== $name);
+        if ('Deposit' === ($payment['type'] ?? '') && preg_match('/^\s*Скасування\s*[.:]/ui', (string) ($payment['description'] ?? ''))) {
+            $refundId = array_search('Повернення коштів', $available, true);
+
+            return false === $refundId ? [] : [['id' => (string) $refundId, 'name' => 'Повернення коштів', 'reason' => 'Банк позначив скасування платежу']];
+        }
         $scores      = [];
         $description = self::normalize((string) ($payment['description'] ?? ''));
         $merchant    = self::normalize((string) ($payment['merchant'] ?? ''));

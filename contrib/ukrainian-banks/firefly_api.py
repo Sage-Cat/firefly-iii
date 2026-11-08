@@ -24,7 +24,7 @@ class Client:
             raise ValueError("Invalid API token file")
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def _request(self, method, path, body=None, content_type=None, notes_hash=None):
+    def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -36,6 +36,10 @@ class Client:
             if not re.fullmatch(r"[0-9a-f]{64}", notes_hash):
                 raise ValueError("Invalid account notes hash")
             headers["If-Match-Notes"] = notes_hash
+        if category_match is not None:
+            if not re.fullmatch(r"(?:none|[1-9][0-9]*)", category_match):
+                raise ValueError("Invalid expected transaction category")
+            headers["If-Match-Category"] = category_match
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method=method)
         try:
             with self._http.open(request, timeout=30) as response:
@@ -49,9 +53,9 @@ class Client:
                 details = "Unexpected non-JSON response"
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
-    def request(self, method, path, data=None, *, notes_hash=None):
+    def request(self, method, path, data=None, *, notes_hash=None, category_match=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
-        result = self._request(method, path, body, "application/json", notes_hash=notes_hash)
+        result = self._request(method, path, body, "application/json", notes_hash=notes_hash, category_match=category_match)
         return json.loads(result) if result else None
 
     def all(self, path):

@@ -9,6 +9,7 @@ use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Reports\ProfitSummary;
+use FireflyIII\Support\Reports\RefundProjection;
 use FireflyIII\Support\Reports\ReportingCurrency;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -50,6 +51,7 @@ final class ProfitReportController extends Controller
                 ->setAccounts($assets)
                 ->setTypes([TransactionTypeEnum::DEPOSIT->value, TransactionTypeEnum::WITHDRAWAL->value])
                 ->withAccountInformation()
+                ->withCategoryInformation()
                 ->getExtractedJournals();
             foreach ($raw as $journal) {
                 $journals[] = [
@@ -59,10 +61,12 @@ final class ProfitReportController extends Controller
                     'source_id'      => $journal['source_account_id'],
                     'destination_id' => $journal['destination_account_id'],
                     'currency'       => $journal['currency_code'],
-                    'amount'         => (string) $journal['amount']
+                    'amount'         => (string) $journal['amount'],
+                    'category_name'  => $journal['category_name'] ?? null
                 ];
             }
         }
+        $journals         = RefundProjection::annotate($journals, RefundProjection::metadata($user));
         $error            = null;
         $summary          = null;
         $monthlySummary   = null;

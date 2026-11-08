@@ -702,6 +702,9 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
     counts = apply_plan(firefly, plan, state_dir, config)
     result = {"finished_at": datetime.now(KYIV).isoformat(), "source_at": plan["source_at"],
               "accounts_verified": len(plan["targets"]), "counts": counts}
+    if config.get("auto_refunds"):
+        from bank_refunds import synchronize
+        result["refunds"] = synchronize(firefly, state_dir.parent / "refunds")
     save_json(state_dir / "last-success.json", result)
     return result
 

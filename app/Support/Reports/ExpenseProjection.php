@@ -31,14 +31,19 @@ final class ExpenseProjection
         }
         [$first, $last] = Steam::accountsBalancesInRange($accounts, $start, $end, ReportingCurrency::currency('EUR'), false);
 
-        return self::accountChartFromBalances($accounts->pluck('name', 'id')->all(), $first, $last);
+        return self::accountChartFromBalances(
+            $accounts->pluck('name', 'id')->all(),
+            $first,
+            $last,
+            RefundProjection::merchantCredits(RefundProjection::metadata(auth()->user()), $start->format('Y-m-d'), $end->format('Y-m-d'))
+        );
     }
 
-    public static function accountChartFromBalances(array $names, array $startBalances, array $endBalances): array
+    public static function accountChartFromBalances(array $names, array $startBalances, array $endBalances, array $refundCredits = []): array
     {
         $entries = [];
         foreach ($names as $id => $name) {
-            $total = self::nativeBalanceUAH($endBalances[$id] ?? [], $startBalances[$id] ?? []);
+            $total = bcsub(self::nativeBalanceUAH($endBalances[$id] ?? [], $startBalances[$id] ?? []), $refundCredits[$id] ?? '0.00', 2);
             if (0 !== bccomp($total, '0', 2)) {
                 $entries[$name] = bcadd($entries[$name] ?? '0.00', $total, 2);
             }
@@ -93,11 +98,13 @@ final class ExpenseProjection
     {
         $entries = [];
         foreach ($journals as $journal) {
-            if ('Withdrawal' !== $journal['transaction_type_type']) {
+            if ('Withdrawal' !== $journal['transaction_type_type'] && !RefundProjection::isRefund($journal)) {
                 continue;
             }
-            $name           = $journal['category_name'] ?? trans('firefly.no_category');
-            $entries[$name] = bcadd($entries[$name] ?? '0.00', self::amount($journal, 'UAH', true)['amount'], 2);
+            $name = RefundProjection::isRefund($journal) && null !== ($journal['refund_original_id'] ?? null)
+                ? $journal['refund_category_name'] ?? trans('firefly.no_category')
+                : $journal['category_name'] ?? trans('firefly.no_category');
+            $entries[$name] = bcadd($entries[$name] ?? '0.00', self::spending($journal), 2);
         }
         uasort($entries, static fn(string $left, string $right): int => bccomp($right, $left, 2));
         $currency = ReportingCurrency::currency('UAH');
@@ -111,6 +118,18 @@ final class ExpenseProjection
         $repository = app(CategoryRepositoryInterface::class);
         $repository->setUser(auth()->user());
         $journals = $repository->periodCollection($category, $start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay());
+
+        $journals = RefundProjection::annotate($journals, RefundProjection::metadata(auth()->user()));
+        $seen     = array_fill_keys(array_map(static fn(array $row): string => (string) ($row['transaction_journal_id'] ?? $row['id'] ?? ''), $journals), true);
+        foreach (self::allJournals($start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay(), ['Deposit']) as $refund) {
+            if (
+                RefundProjection::isRefund($refund)
+                && (string) ($refund['refund_category_id'] ?? '') === (string) $category->id
+                && !isset($seen[(string) ($refund['transaction_journal_id'] ?? $refund['id'] ?? '')])
+            ) {
+                $journals[] = $refund;
+            }
+        }
 
         return self::categoryHistoryFrom($journals, self::historyBlocks($start, $end, $step));
     }
@@ -131,7 +150,7 @@ final class ExpenseProjection
             ];
         }
         foreach ($journals as $journal) {
-            $type = $journal['transaction_type_type'] ?? $journal['type'];
+            $type = RefundProjection::isRefund($journal) ? 'Withdrawal' : $journal['transaction_type_type'] ?? $journal['type'];
             if (!isset($series[$type])) {
                 continue;
             }
@@ -139,7 +158,8 @@ final class ExpenseProjection
             foreach ($blocks as $block) {
                 if ($day >= $block['start'] && $day <= $block['end']) {
                     $label                            = $block['label'];
-                    $series[$type]['entries'][$label] = bcadd($series[$type]['entries'][$label], self::amount($journal, 'UAH', true)['amount'], 2);
+                    $value                            = 'Withdrawal' === $type ? self::spending($journal) : self::amount($journal, 'UAH', true)['amount'];
+                    $series[$type]['entries'][$label] = bcadd($series[$type]['entries'][$label], $value, 2);
                     break;
                 }
             }
@@ -167,7 +187,16 @@ final class ExpenseProjection
             $collector->setCategories(new Collection()->push($category));
         }
 
-        return self::categoryHistoryFrom($collector->getExtractedJournals(), $blocks);
+        $rows = RefundProjection::annotate($collector->getExtractedJournals(), RefundProjection::metadata(auth()->user()));
+        $seen = array_fill_keys(array_map(static fn(array $row): string => (string) ($row['transaction_journal_id'] ?? $row['id'] ?? ''), $rows), true);
+        foreach (self::allJournals($start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay(), ['Deposit'], null, $accounts) as $refund) {
+            $matches = null === $category ? empty($refund['refund_category_id']) : (string) ($refund['refund_category_id'] ?? '') === (string) $category->id;
+            if (RefundProjection::isRefund($refund) && $matches && !isset($seen[(string) $refund['transaction_journal_id']])) {
+                $rows[] = $refund;
+            }
+        }
+
+        return self::categoryHistoryFrom($rows, $blocks);
     }
 
     public static function detailAmounts(array $group): array
@@ -254,16 +283,24 @@ final class ExpenseProjection
         $current  = Steam::accountsBalancesOptimized($accounts, now('Europe/Kyiv'), $currency, false);
         [$first, $last] = Steam::accountsBalancesInRange($accounts, $start->copy()->startOfDay(), $end->copy()->endOfDay(), $currency, false);
 
-        return self::merchantDisplayFromBalances($current, $first, $last);
+        $refunds = RefundProjection::metadata(auth()->user());
+
+        return self::merchantDisplayFromBalances(
+            $current,
+            $first,
+            $last,
+            RefundProjection::merchantCredits($refunds, null, ReportingCurrency::today()->format('Y-m-d')),
+            RefundProjection::merchantCredits($refunds, $start->format('Y-m-d'), $end->format('Y-m-d'))
+        );
     }
 
-    public static function merchantDisplayFromBalances(array $current, array $start, array $end): array
+    public static function merchantDisplayFromBalances(array $current, array $start, array $end, array $currentRefunds = [], array $periodRefunds = []): array
     {
         $currency = ReportingCurrency::currency('UAH');
         $result   = [];
         foreach (array_unique(array_merge(array_keys($current), array_keys($start), array_keys($end))) as $id) {
-            $balance    = self::nativeBalanceUAH($current[$id] ?? []);
-            $difference = self::nativeBalanceUAH($end[$id] ?? [], $start[$id] ?? []);
+            $balance    = bcsub(self::nativeBalanceUAH($current[$id] ?? []), $currentRefunds[$id] ?? '0.00', 2);
+            $difference = bcsub(self::nativeBalanceUAH($end[$id] ?? [], $start[$id] ?? []), $periodRefunds[$id] ?? '0.00', 2);
             if (Steam::anonymous()) {
                 $balance = $difference = '0.00';
             }
@@ -294,8 +331,19 @@ final class ExpenseProjection
         $repository->setUser(auth()->user());
         $blocks = self::blocks($start, $end);
         [$first, $last] = self::bounds($blocks, $start, $end);
-        $journals = $repository->periodCollection($model, $first, $last);
-        $route    = match ($model::class) {
+        $journals = RefundProjection::annotate($repository->periodCollection($model, $first, $last), RefundProjection::metadata(auth()->user()));
+        if ($model instanceof Category || $model instanceof Account) {
+            $seen = array_fill_keys(array_map(static fn(array $row): string => (string) ($row['transaction_journal_id'] ?? $row['id'] ?? ''), $journals), true);
+            foreach (self::allJournals($first, $last, ['Deposit']) as $refund) {
+                $matches = $model instanceof Category
+                    ? (string) ($refund['refund_category_id'] ?? '') === (string) $model->id
+                    : (string) ($refund['refund_merchant_id'] ?? '') === (string) $model->id;
+                if (RefundProjection::isRefund($refund) && $matches && !isset($seen[(string) $refund['transaction_journal_id']])) {
+                    $journals[] = $refund;
+                }
+            }
+        }
+        $route = match ($model::class) {
             Account::class  => 'accounts.show',
             Category::class => 'categories.show',
             Tag::class      => 'tags.show'
@@ -375,8 +423,14 @@ final class ExpenseProjection
         $sum   = '0.00';
         $count = 0;
         foreach ($journals as $journal) {
-            $type = $journal['transaction_type_type'] ?? $journal['type'];
-            if (!in_array($type, $types, true) || self::day($journal) < $start || self::day($journal) > $end) {
+            $type   = $journal['transaction_type_type'] ?? $journal['type'];
+            $refund = RefundProjection::isRefund($journal);
+            if (
+                !in_array($type, $types, true) && !($refund && in_array('Withdrawal', $types, true))
+                || $refund && !in_array('Withdrawal', $types, true)
+                || self::day($journal) < $start
+                || self::day($journal) > $end
+            ) {
                 continue;
             }
             if ('in' === $direction && bccomp((string) $journal['amount'], '0', 12) <= 0) {
@@ -385,10 +439,11 @@ final class ExpenseProjection
             if ('away' === $direction && bccomp((string) $journal['amount'], '0', 12) >= 0) {
                 continue;
             }
-            if ('Withdrawal' === $type && bccomp((string) $journal['amount'], '0', 12) > 0) {
-                $journal['amount'] = bcsub('0', (string) $journal['amount'], 12);
+            $value = self::amount($journal, $target)['amount'];
+            if ($refund || 'Withdrawal' === $type) {
+                $value = bcsub('0', self::spending($journal, $target), 2);
             }
-            $sum = bcadd($sum, self::amount($journal, $target)['amount'], 2);
+            $sum = bcadd($sum, $value, 2);
             ++$count;
         }
         if (0 === $count) {
@@ -425,6 +480,13 @@ final class ExpenseProjection
         return self::amount($journal + ($currency ?? []), self::expenseRequest() ? 'UAH' : $fallback, true);
     }
 
+    public static function spending(array $row, string $target = 'UAH'): string
+    {
+        $amount = self::amount($row, $target, true)['amount'];
+
+        return RefundProjection::isRefund($row) ? bcsub('0', $amount, 2) : $amount;
+    }
+
     public static function withdrawals(Carbon $start, Carbon $end, null|Account $account = null): array
     {
         $repository = app(AccountRepositoryInterface::class);
@@ -439,22 +501,24 @@ final class ExpenseProjection
             ->setUser(auth()->user())
             ->setAccounts($assets)
             ->setRange($start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay())
-            ->setTypes([TransactionTypeEnum::WITHDRAWAL->value])
+            ->setTypes([TransactionTypeEnum::WITHDRAWAL->value, 'Deposit'])
             ->withAccountInformation()
             ->withCategoryInformation()
             ->withBudgetInformation()
             ->getExtractedJournals();
-        $first = $start->format('Y-m-d');
-        $last  = $end->format('Y-m-d');
+        $journals = RefundProjection::annotate($journals, RefundProjection::metadata(auth()->user()));
+        $first    = $start->format('Y-m-d');
+        $last     = $end->format('Y-m-d');
 
         return array_values(array_filter($journals, static function (array $row) use ($owned, $account, $first, $last): bool {
             $source      = (string) $row['source_account_id'];
             $destination = (string) $row['destination_account_id'];
 
+            $withdrawal = 'Withdrawal' === $row['transaction_type_type'] && isset($owned[$source]) && !isset($owned[$destination]);
+            $refund     = RefundProjection::isRefund($row) && isset($owned[$destination]) && !isset($owned[$source]);
+
             return (
-                'Withdrawal' === $row['transaction_type_type']
-                && isset($owned[$source])
-                && !isset($owned[$destination])
+                ($withdrawal || $refund)
                 && self::day($row) >= $first
                 && self::day($row) <= $last
                 && (null === $account || (string) $account->id === $source || (string) $account->id === $destination)
@@ -462,13 +526,23 @@ final class ExpenseProjection
         }));
     }
 
-    private static function allJournals(Carbon $start, Carbon $end, array $types, null|string $without = null): array
+    private static function allJournals(Carbon $start, Carbon $end, array $types, null|string $without = null, null|Collection $requestedAccounts = null): array
     {
         $repository = app(AccountRepositoryInterface::class);
         $repository->setUser(auth()->user());
         $assets = $repository->getAccountsByType(config('firefly.accountTypesByIdentifier.asset'));
         if ($assets->isEmpty()) {
             return [];
+        }
+        if (null !== $requestedAccounts) {
+            $selected = array_fill_keys(array_map('strval', $requestedAccounts->pluck('id')->all()), true);
+            $assets   = $assets->filter(static fn($account): bool => isset($selected[(string) $account->id]));
+            if ($assets->isEmpty()) {
+                return [];
+            }
+        }
+        if (in_array('Withdrawal', $types, true) && !in_array('Deposit', $types, true)) {
+            $types[] = 'Deposit';
         }
         $collector = app(GroupCollectorInterface::class)
             ->setUser(auth()->user())
@@ -478,14 +552,20 @@ final class ExpenseProjection
             ->withAccountInformation()
             ->withCategoryInformation()
             ->withBudgetInformation();
-        if ('category' === $without) {
-            $collector->withoutCategory();
-        }
-        if ('budget' === $without) {
-            $collector->withoutBudget();
+        $rows = RefundProjection::annotate($collector->getExtractedJournals(), RefundProjection::metadata(auth()->user()));
+        if (null !== $without) {
+            $rows = array_values(array_filter($rows, static function (array $row) use ($without): bool {
+                if ('category' === $without) {
+                    return empty(RefundProjection::isRefund($row) && null !== ($row['refund_original_id'] ?? null)
+                        ? $row['refund_category_id'] ?? null
+                        : $row['category_id'] ?? null);
+                }
+
+                return empty(RefundProjection::isRefund($row) ? $row['refund_budget_ids'] ?? [] : $row['budget_id'] ?? null);
+            }));
         }
 
-        return $collector->getExtractedJournals();
+        return $rows;
     }
 
     private static function blocks(Carbon $start, Carbon $end): array

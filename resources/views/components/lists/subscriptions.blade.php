@@ -7,7 +7,7 @@
                                                   :route="route('subscriptions.create')"
                                                   :linkTitle="__('firefly.create_new_bill')"/>
                 <div class="card-body p-0">
-                    <table class="table table-valign-middle table-hover table-sm" id="bill-sortable">
+                    <div class="table-responsive"><table class="table table-valign-middle table-hover table-sm" id="bill-sortable">
                         <thead>
                         <tr>
                             <th class="w-5">&nbsp;</th>
@@ -179,54 +179,10 @@
                                     </td>
                                 </tr>
                             @endforeach
-                            @if(array_key_exists($objectGroupOrder, $sums))
-                                @foreach($sums[$objectGroupOrder] as $sum)
-                                    @if('0' !== $sum['avg'])
-                                        <tr {{-- hide on MD and smaller --}} class="d-lg-table-row d-none">
-                                            <td class="d-xl-table-cell d-none">&nbsp;</td> <!-- handle -->
-                                            <td colspan="2" class="text-end"> <!-- title -->
-                                                <small>{{ __('firefly.sum') }} ({{ $sum['currency_name'] }})
-                                                    ({{ __('firefly.active_exp_bills_only') }})</small>
-                                            </td>
-                                            <td class="text-end"> <!-- amount -->
-                                                {!! format_amount_by_symbol($sum['avg'], $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
-                                            </td>
-                                            <td colspan="4">&nbsp;</td> <!-- handle -->
-                                        </tr>
-                                    @endif
-                                    @if('0' !== $sum['total_left_to_pay'])
-                                        <tr {{-- hide on MD and smaller --}} class="d-lg-table-row d-none">
-                                            <td class="d-xl-table-cell d-none">&nbsp;</td> <!-- handle -->
-                                            <td colspan="2" class="text-end"> <!-- title -->
-                                                <small>{{ __('firefly.sum') }} ({{ $sum['currency_name'] }})
-                                                    ({{ __('firefly.left_to_pay_active_bills') }})</small>
-                                            </td>
-                                            <td class="text-end"> <!-- amount -->
-                                                {!! format_amount_by_symbol($sum['total_left_to_pay'], $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
-                                            </td>
-                                            <td colspan="4">&nbsp;</td> <!-- handle -->
-                                        </tr>
-                                    @endif
-                                    @if('0' !== $sum['per_period'])
-                                        <tr {{-- hide on MD and smaller --}} class="d-lg-table-row d-none">
-                                            <td class="d-xl-table-cell d-none">&nbsp;</td> <!-- handle -->
-                                            <td colspan="2" class="text-end"> <!-- title -->
-                                                <small>{{ __('firefly.per_period_sum_' . $sum['period']) }}
-                                                    ({{ $sum['currency_name'] }})
-                                                    ({{ __('firefly.active_bills_only') }})</small>
-                                            </td>
-                                            <td class="text-end"> <!-- amount -->
-                                                {!!  format_amount_by_symbol($sum['per_period'], $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
-                                            </td>
-                                            <td colspan="4">&nbsp;</td> <!-- handle -->
-                                        </tr>
-                                    @endif
-                                @endforeach
-                            @endif
                             </tbody>
                         @endif
 
-                    </table>
+                    </table></div>
                 </div>
                 <x-elements.card-footer-with-menu :route="route('subscriptions.create')"
                                                   :linkTitle="__('firefly.create_new_bill')"/>
@@ -235,38 +191,3 @@
     </div>
 @endif
     @endforeach
-
-@if(count($totals) > 0)
-
-    <h5 class="m-2">{{ __('firefly.totals') }}</h5>
-
-    <table class="table table-bordered table-sm table-hover mb-2">
-        <tbody>
-        @foreach($totals as $sum)
-            @if('0' !== $sum['avg'])
-                <tr>
-                    <td class="text-end"> <!-- title -->
-                        <small>{{ __('firefly.sum') }} ({{ $sum['currency_name'] }})
-                            ({{ __('firefly.active_exp_bills_only_total') }})</small>
-                    </td>
-                    <td class="text-end"> <!-- amount -->
-                        {!! format_amount_by_symbol($sum['avg'], $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
-                    </td>
-                </tr>
-            @endif
-            @if('0' !== $sum['per_period'])
-                <tr>
-                    <td class="text-end"> <!-- title -->
-                        <small>{{ __('firefly.per_period_sum_' . $sum['period']) }} ({{ $sum['currency_name'] }})
-                            ({{ __('firefly.active_bills_only_total') }})</small>
-                    </td>
-                    <td class="text-end"> <!-- amount -->
-                        {!! format_amount_by_symbol($sum['per_period'], $sum['currency_symbol'], $sum['currency_decimal_places']) !!}
-                    </td>
-                </tr>
-            @endif
-        @endforeach
-        </tbody>
-
-    </table>
-@endif

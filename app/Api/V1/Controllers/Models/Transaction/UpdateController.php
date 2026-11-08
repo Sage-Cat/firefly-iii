@@ -77,6 +77,10 @@ final class UpdateController extends Controller
      */
     public function update(UpdateRequest $request, TransactionGroup $transactionGroup): JsonResponse
     {
+        if ($request->headers->has('If-Match-Category')) {
+            return \FireflyIII\Support\Reports\PaymentCategoryUpdate::update($request, $transactionGroup);
+        }
+
         $data                     = $request->getAll();
         Log::debug('Now in update routine for transaction group', $data);
         $oldHash                  = $this->groupRepository->getCompareHash($transactionGroup);
