@@ -94,5 +94,42 @@ class FopImportTests(unittest.TestCase):
                 self.assertEqual(0,synchronize('sync',state,cached=True)['repeat_creates'])
         self.assertEqual(1,len(ledger.groups))
 
+    def test_classification_is_opt_in_and_runs_after_verified_repeat_and_refunds(self):
+        from monobank_sync import save_json
+        from privat_fop_import import synchronize
+        from test_monobank_sync import Ledger, asset
+        ledger = Ledger([asset('10', 'EUR', '0', '0'), asset('11', 'UAH', '50000', '50000')])
+        order = []
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'privat-fop' / 'sync'
+            state.mkdir(parents=True)
+            save_json(state / 'snapshot.json', self.snapshot())
+            cfg = {'bindings': {'eur': '10', 'uah': '11'}}
+            save_json(state / 'config.json', cfg)
+            def refunds(client, path):
+                order.append('refunds')
+                return {'classified': 0}
+            def classify(client, path):
+                self.assertIs(client, ledger)
+                self.assertEqual(state.parents[1] / 'bank-classification', path)
+                self.assertEqual(1, len(ledger.groups))
+                self.assertEqual('50000.00', ledger.accounts[1]['attributes']['current_balance'])
+                self.assertEqual(['refunds'], order)
+                order.append('classification')
+                return {'classified': 1}
+            with patch('firefly_api.Client', return_value=ledger), patch('monobank_sync.ensure_rates'), \
+                 patch('bank_refunds.synchronize', side_effect=refunds), \
+                 patch('bank_classification.synchronize', side_effect=classify) as hook:
+                self.assertNotIn('classification', synchronize('sync', state, cached=True))
+                hook.assert_not_called()
+                cfg.update(auto_refunds=True, auto_classification=True)
+                save_json(state / 'config.json', cfg)
+                synchronize('plan', state, cached=True)
+                hook.assert_not_called()
+                result = synchronize('sync', state, cached=True)
+                self.assertEqual(0, result['repeat_creates'])
+                self.assertEqual({'classified': 1}, result['classification'])
+                self.assertEqual(1, hook.call_count)
+
 
 if __name__=='__main__':unittest.main()

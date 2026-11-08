@@ -210,6 +210,43 @@ class SyncTests(unittest.TestCase):
         self.assertEqual({"classified": 0, "links_created": 0}, result["refunds"])
         self.assertTrue(sync.read_json(self.state / "active-state.json")["config"]["auto_refunds"])
 
+    def test_opted_in_classification_runs_after_verified_import_and_refunds(self):
+        self.config.update(auto_refunds=True, auto_classification=True)
+        ledger = Ledger(self.accounts)
+        sync.save_json(self.state / "config.json", self.config)
+        sync.save_json(self.state / "snapshot.json", self.snapshot)
+        order = []
+        def refunds(client, state):
+            order.append("refunds")
+            return {"classified": 0}
+        def classify(client, state):
+            self.assertIs(client, ledger)
+            self.assertEqual(self.state.parent / "bank-classification", state)
+            self.assertEqual("17300.00", ledger.accounts[0]["attributes"]["current_balance"])
+            self.assertEqual(2, len(ledger.groups))
+            self.assertEqual(["refunds"], order)
+            order.append("classification")
+            return {"classified": 2}
+        with patch.object(sync, "FireflyClient", return_value=ledger), patch.object(sync, "ensure_rates"), \
+             patch("bank_refunds.synchronize", side_effect=refunds), \
+             patch("bank_classification.synchronize", side_effect=classify) as hook:
+            result = sync.run("sync", True, self.state)
+        self.assertEqual(1, hook.call_count)
+        self.assertEqual({"classified": 2}, result["classification"])
+
+    def test_classification_is_opt_in_and_never_runs_for_an_import_plan(self):
+        ledger = Ledger(self.accounts)
+        sync.save_json(self.state / "config.json", self.config)
+        sync.save_json(self.state / "snapshot.json", self.snapshot)
+        with patch.object(sync, "FireflyClient", return_value=ledger), patch.object(sync, "ensure_rates"), \
+             patch("bank_classification.synchronize") as hook:
+            self.assertNotIn("classification", sync.run("sync", True, self.state))
+            self.config["auto_classification"] = True
+            sync.save_json(self.state / "active-state.json", {
+                "config": self.config, "baseline": sync.read_json(self.state / "baseline.json")})
+            sync.run("plan", True, self.state)
+        hook.assert_not_called()
+
     def test_unknown_own_transfer_becomes_uncategorized_review(self):
         import json
         self.config["approved_transfers"] = {}
