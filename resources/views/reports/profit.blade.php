@@ -91,11 +91,11 @@
                             @foreach($monthlySummary['points'] as $point)
                                 <tr>
                                     <td>{{ \Carbon\Carbon::parse($point['period'].'-01')->translatedFormat('F Y') }}<div class="small text-muted">{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</div></td>
-                                    @foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($point['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<td class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }}</td>@endforeach
+                                    @foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($point['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<td class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }} {{ $currency === 'EUR' ? '€' : '₴' }}</td>@endforeach
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th>Разом</th>@foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($monthlySummary['totals']['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<th class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }}</th>@endforeach</tr></tfoot>
+                            <tfoot><tr><th>Разом</th>@foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($monthlySummary['totals']['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<th class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }} {{ $currency === 'EUR' ? '€' : '₴' }}</th>@endforeach</tr></tfoot>
                         </table>
                     </div>
                 </div>
@@ -110,11 +110,11 @@
                                 <tr>
                                     <td>{{ $point['period'] }}</td>
                                     <td>{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</td>
-                                    <td class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }}</td>
+                                    <td class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }} {{ $currency === 'EUR' ? '€' : '₴' }}</td>
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }}</th></tr></tfoot>
+                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }} {{ $currency === 'EUR' ? '€' : '₴' }}</th></tr></tfoot>
                         </table>
                     </div>
                 </div>
