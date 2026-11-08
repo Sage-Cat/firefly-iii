@@ -26,8 +26,8 @@ class FopImportTests(unittest.TestCase):
         plan=plan_import(snapshot,{'bindings':{'eur':'10'}},[asset('10','EUR','100','100')],[])
         t=plan['operations'][0]['transaction']
         self.assertEqual('deposit',t['type'])
-        self.assertEqual('Потребує уточнення',t['category_name'])
-        self.assertIn('Потребує уточнення',t['tags'])
+        self.assertNotIn('category_name',t)
+        self.assertNotIn('Потребує уточнення',t['tags'])
 
     def snapshot(self):
         debit = tx('eur', 'bank', 'EUR', 'D', '1000.00', 'Списання валютно-обмінних операцій по курсу 50.0000000', 'debit')
@@ -67,15 +67,17 @@ class FopImportTests(unittest.TestCase):
         snapshot={'start_date':'2026-08-06','end_date':'2026-08-06','transactions':[
             tx('main','other','EUR','D','100','Move','one'),tx('other','main','EUR','C','100','Move','two')],
             'balances':[balance('main','EUR','100','0','0','100'),balance('other','EUR','0','100','100','0')]}
-        with self.assertRaises(Deferred):normalized_source(snapshot,{'bindings':{'main':'10','other':'11'}})
+        rows,_,_=normalized_source(snapshot,{'bindings':{'main':'10','other':'11'}})
+        self.assertTrue(all(r['review_own'] for r in rows))
 
-    def test_same_owner_identifier_defers_without_literal_description(self):
+    def test_same_owner_identifier_marks_review_without_literal_description(self):
         for identity in [{'AUT_MY_CRF':'self-id','AUT_CNTR_CRF':'self-id'},
                          {'AUT_MY_NAM':'Own Name','AUT_CNTR_NAM':'Own Name'}]:
             snapshot={'start_date':'2026-08-06','end_date':'2026-08-06','transactions':[
                 dict(tx('main','outside','EUR','D','100','Transfer','one'),**identity)],
                 'balances':[balance('main','EUR','100','0','0','100')]}
-            with self.assertRaises(Deferred):normalized_source(snapshot,{'bindings':{'main':'10'}})
+            rows,_,_=normalized_source(snapshot,{'bindings':{'main':'10'}})
+            self.assertTrue(rows[0]['review_own'])
 
     def test_scheduled_engine_repeats_without_new_records(self):
         from monobank_sync import save_json

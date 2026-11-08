@@ -62,14 +62,16 @@ class ImportTests(unittest.TestCase):
 
     def test_unmapped_own_transfer_is_not_income(self):
         workbook(self.path, [row('01.08.2026 12:00:00', '10', '100', 'Зарахування зі своєї картки')])
-        with self.assertRaises(Deferred): build_plan(self.config(), self.accounts(), [])
+        tx = build_plan(self.config(), self.accounts(), [])['operations'][0]['transaction']
+        self.assertEqual('transfer', tx['type'])
+        self.assertEqual('bank-review:UAH', tx['source_id'])
 
     def test_unknown_bank_category_waits_for_owner_choice(self):
         workbook(self.path, [row('01.08.2026 12:00:00', '-10', '90', 'Дозвілля', 'Unknown merchant')])
         plan = build_plan(self.config(), self.accounts('90','90'), [])
         tx = plan['operations'][0]['transaction']
-        self.assertEqual('Потребує уточнення',tx['category_name'])
-        self.assertIn('Потребує уточнення',tx['tags'])
+        self.assertNotIn('category_name',tx)
+        self.assertNotIn('Потребує уточнення',tx['tags'])
 
     def test_foreign_transfer_pair_and_peer_preservation(self):
         workbook(self.path, [row('01.08.2026 12:00:00', '50', '100', 'Зарахування зі своєї картки')])

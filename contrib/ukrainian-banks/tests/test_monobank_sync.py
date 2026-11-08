@@ -193,15 +193,16 @@ class SyncTests(unittest.TestCase):
         with self.assertRaisesRegex(sync.Deferred, "opening balance was changed"):
             self.plan(ledger, sync.read_json(self.state / "baseline.json"))
 
-    def test_unknown_own_transfer_is_deferred(self):
+    def test_unknown_own_transfer_becomes_uncategorized_review(self):
+        import json
         self.config["approved_transfers"] = {}
-        with self.assertRaisesRegex(sync.Deferred, "confirmation"):
-            self.plan()
+        plan = self.plan()
+        self.assertTrue(all(o["transaction"]["type"] == "transfer" for o in plan["operations"]))
+        self.assertTrue(all(json.loads(o["transaction"]["notes"])["bank_review"]["status"] == "pending" for o in plan["operations"]))
         self.config["self_names"] = []
         rows = self.snapshot["statements"][sync.statement_file("bank-eur")]["items"]
         rows[0].update(counterName="", description="Переказ між власними рахунками")
-        with self.assertRaisesRegex(sync.Deferred, "confirmation"):
-            self.plan()
+        self.assertEqual("bank-review:EUR", self.plan()["operations"][0]["transaction"]["source_id"])
 
     def test_account_bindings_are_one_to_one(self):
         original = copy.deepcopy(self.config)
@@ -274,11 +275,11 @@ class SyncTests(unittest.TestCase):
         self.assertEqual((op["transaction"]["source_id"], op["transaction"]["destination_id"]), ("10", "11"))
         self.assertEqual(len(op["aliases"]), 2)
         self.snapshot["statements"][sync.statement_file("bank-uah")]["items"][0]["counterIban"] = "UA-THIRD-PARTY"
-        with self.assertRaises(sync.Deferred):
-            self.plan()
+        unresolved = self.plan()
+        self.assertEqual(2, len(unresolved["operations"]))
+        self.assertTrue(all("bank_review" in json.loads(o["transaction"]["notes"]) for o in unresolved["operations"]))
         self.snapshot["statements"][sync.statement_file("bank-uah")]["items"][0].pop("counterIban")
-        with self.assertRaises(sync.Deferred):
-            self.plan()
+        self.assertEqual(1, len(self.plan()["operations"]))
 
     def test_integer_minor_units_are_required(self):
         with self.assertRaises(sync.Deferred):
@@ -471,8 +472,7 @@ class SyncTests(unittest.TestCase):
     def test_reversed_self_name_is_not_new_income(self):
         self.config["approved_transfers"] = {}
         self.snapshot["statements"][sync.statement_file("bank-eur")]["items"][0]["counterName"] = "Name My"
-        with self.assertRaisesRegex(sync.Deferred, "confirmation"):
-            self.plan()
+        self.assertEqual("transfer", self.plan()["operations"][0]["transaction"]["type"])
 
     def test_older_history_fetch_preserves_newer_revisions_and_asof(self):
         original = copy.deepcopy(self.snapshot)
