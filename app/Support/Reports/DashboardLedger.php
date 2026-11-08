@@ -20,10 +20,11 @@ final class DashboardLedger
         }
         $repository = app(AccountRepositoryInterface::class);
         $repository->setUser($user);
-        $types    = array_values(array_unique(array_merge(
+        $types = array_values(array_unique(array_merge(
             config('firefly.accountTypesByIdentifier.asset'),
             config('firefly.accountTypesByIdentifier.liabilities')
         )));
+
         $models   = $repository->getAccountsByType($types);
         $accounts = [];
         $coverage = [];
@@ -37,6 +38,7 @@ final class DashboardLedger
             $history  = BalanceHistory::read($notes);
             $metadata = json_decode($notes, true);
             $suspense = is_array($metadata) && 1 === ($metadata['bank_review_suspense'] ?? null) && $currency->code === ($metadata['currency'] ?? null);
+
             $coverage[(string) $account->id] = $history['ledger_from'];
             $accounts[(string) $account->id] = [
                 'id'         => (string) $account->id,
