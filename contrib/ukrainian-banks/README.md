@@ -56,6 +56,27 @@ already staged independently, `paired_pending` keeps them visible without a
 non-atomic merge; remaining valid payments continue importing. Resolve that
 pair conflict before finalizing its reroute.
 
+## Refunds and cashback
+
+Refund synchronization is opt-in: set `"auto_refunds": true` in the provider
+configuration to run it after a successful import. It recognizes explicit
+settled monobank cancellations, preserves manual categories, and links only
+one unambiguous same-account, same-currency, equal-amount purchase within ten
+minutes on the same day. Ambiguous matches remain available for review.
+
+Classification uses the native `Повернення коштів` category and this fork's
+`If-Match-Category` conditional API update. The expected category is checked
+while locking the journal; a stale category returns 409. Only the category
+relation changes, with rules and webhooks disabled. Native `Refund` links
+connect purchases to refunds without changing original movements or balances.
+Reports treat refunds as expense credits rather than income; validated links
+credit the original category, budget, merchant and subscription on the refund
+date. Unlinked classified refunds remain separate expense credits.
+
+Keep cashback in a separate account from purchases and refunds. A provider's
+cashback metadata alone does not create a financial movement; import an actual
+cashback payout only when its statement confirms it.
+
 ## Balance valuation history
 
 `capital_history.py plan` reads private Sheets values/formulas plus account

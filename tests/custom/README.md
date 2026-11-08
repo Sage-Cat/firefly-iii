@@ -61,3 +61,18 @@ CSRF protection. `payment_review_storage.php` creates an isolated in-memory
 SQLite schema with synthetic rows; it does not read production accounts.
 For testing against a separately installed application, set
 `FIREFLY_TEST_APP_ROOT` to its root; the default is this repository.
+
+Refund checks cover expense credits across profit, budgets, categories,
+merchants, dashboard cards and subscription payments. Native `Refund` link
+fixtures verify ownership, account/currency matching, ambiguity and cumulative
+refund limits. `refund_storage.php` and `refund_category_update.php` use
+isolated in-memory SQLite rows to check metadata and conditional category
+updates, including stale requests and preservation of financial fields.
+
+`subscription_overview.php` checks the active-subscription monthly forecast,
+UAH/EUR conversion, deterministic cent allocation, empty/error states and
+owner scope. It also checks the native list, controls and bounded doughnut
+chart markup. These source checks do not replace a browser layout check.
+With `FIREFLY_TEST_APP_ROOT` set, only Composer dependencies and application
+bootstrap come from that installation; checked source and views stay in this
+repository.
