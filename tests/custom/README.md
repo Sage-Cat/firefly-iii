@@ -55,6 +55,36 @@ node tests/custom/dashboard_history_url.mjs
 
 Generated `public/build` files remain ignored by Git.
 
+Currency display checks keep native PHP rounding, locale, colour, precision
+and anonymous masking while normalizing currency symbols and legacy aliases.
+`currency_symbols_php.php` compares the native formatter against a fixed
+baseline fixture and verifies that currency models remain unchanged.
+`currency_display.mjs` covers exact decimal strings, fiat/token precision,
+unknown symbols and legacy accounting argument preservation:
+
+```sh
+node tests/custom/currency_display.mjs
+```
+
+Use Node 24+ for the normal Vite production build. After building, validate
+the generated shared formatter, every JavaScript asset's SRI/import paths,
+and synchronous helper loading with CSP nonce and content hashes in all six
+base layouts:
+
+```sh
+npm run build --workspace=resources/assets/v3
+node tests/custom/currency_symbols_native.mjs
+```
+
+The shared helper lives in `public/v1/js/ff/currency-display.js`; the source
+Vite formatter delegates to it, and the native legacy accounting source uses
+the same policy. No generated bundle or deployment patcher is committed.
+Stored codes, currency IDs, precision, rates and currency preferences remain
+authoritative. When using dependencies from an older separate installation,
+preload the checked helper with
+`php -d auto_prepend_file=app/Support/Reports/CurrencyDisplay.php` for PHP
+fixture processes.
+
 Payment-review checks cover recommendation-only choices, owner/category/account
 scope, stale requests, immutable queued decisions, category-only writes and
 CSRF protection. `payment_review_storage.php` creates an isolated in-memory

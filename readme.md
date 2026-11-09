@@ -30,6 +30,7 @@ This fork adds a Ukrainian finance reporting profile while retaining the upstrea
 - A combined EUR net-worth card and daily history, with original currencies retained in the other dashboard cards.
 - Consolidated UAH/EUR profit charts with independent three-month monthly and weekly tables in a right-hand column.
 - UAH expense and budget views with simplified navigation.
+- Shared display symbols for UAH (`грн`), EUR (`€`), USD (`$`), CHF (`₣`) and USDT (`₮`), including native and legacy amount formatters.
 
 Optional [Ukrainian bank import tools](contrib/ukrainian-banks/README.md) run separately from the application.
 The [reporting checks](tests/custom/README.md) describe the synthetic test suite and frontend build.
