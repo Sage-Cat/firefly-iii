@@ -60,7 +60,7 @@ namespace {
         ++$GLOBALS['checks'];
     }
 
-    $policy = ['UAH' => 'грн', 'EUR' => '€', 'USD' => '$', 'CHF' => '₣', 'USDT' => '₮'];
+    $policy = ['UAH' => '₴', 'EUR' => '€', 'USD' => '$', 'CHF' => '₣', 'USDT' => '₮'];
     foreach ($policy as $code => $symbol) {
         check(CurrencyDisplay::symbol($code) === $symbol, 'Known ISO codes use the agreed display symbol.');
         check(CurrencyDisplay::symbol(' ' . strtolower($code) . ' ', 'old') === $symbol, 'Code-aware formatting overrides stale model symbols.');
@@ -69,7 +69,7 @@ namespace {
             'Direct codes and normalized symbols share one policy.'
         );
     }
-    foreach (['₴' => 'грн', 'грн.' => 'грн', 'US$' => '$'] as $old => $expected) {
+    foreach (['грн' => '₴', 'грн.' => '₴', 'US$' => '$'] as $old => $expected) {
         check(CurrencyDisplay::normalize($old) === $expected, 'Exact legacy aliases normalize without changing values.');
     }
     foreach (['USD savings', 'CHF/EUR', 'USDT (staking)', '  Points  ', '<em>&"coin"</em>', ''] as $unknown) {
@@ -77,12 +77,12 @@ namespace {
     }
     check(CurrencyDisplay::symbol('BTC', '₿') === '₿', 'Unknown currency codes preserve their configured symbol.');
     check(CurrencyDisplay::symbol('POINTS') === 'POINTS', 'An unknown code without a symbol remains an explicit fallback.');
-    check(CurrencyDisplay::symbol('UAH', '₣') === 'грн', 'The ISO code has priority over contradictory symbol metadata.');
+    check(CurrencyDisplay::symbol('UAH', '₣') === '₴', 'The ISO code has priority over contradictory symbol metadata.');
 
     $before  = new AmountBeforeSymbols();
     $after   = new Amount();
     $formats = [
-        ['UAH',    '₴',                2, 'грн'],
+        ['UAH',    'грн',              2, '₴'],
         ['EUR',    'EUR',              2, '€'],
         ['USD',    'US$',              2, '$'],
         ['CHF',    'CHF',              2, '₣'],
@@ -110,8 +110,8 @@ namespace {
         }
     }
     Steam::$locale = 'uk_UA';
-    check(str_contains($before->formatFlat('₴', 2, '10', false), '₴'), 'The baseline native formatter still exposes the old hryvnia glyph.');
-    check(str_contains($after->formatFlat('₴', 2, '10', false), 'грн'), 'The patched native formatter displays the required hryvnia abbreviation.');
+    check(str_contains($before->formatFlat('грн', 2, '10', false), 'грн'), 'The baseline native formatter still exposes the unmodified hryvnia abbreviation.');
+    check(str_contains($after->formatFlat('грн', 2, '10', false), '₴'), 'The patched native formatter displays the required hryvnia symbol.');
     check(str_contains($after->formatFlat('USD', 2, '-10', true), 'money-negative'), 'Negative amounts keep the native negative colour.');
     check(str_contains($after->formatFlat('EUR', 2, '10', true), 'money-positive'), 'Positive amounts keep the native positive colour.');
     check(str_contains($after->formatFlat('CHF', 2, '0', true), 'money-neutral'), 'Zero amounts keep the native neutral colour.');

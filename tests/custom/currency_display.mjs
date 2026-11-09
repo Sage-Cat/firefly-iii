@@ -16,12 +16,12 @@ function includes(actual, expected, message) {
 }
 const plain = value => value.replaceAll('\u00a0', ' ').replaceAll('\u202f', ' ');
 
-for (const [code, mark] of Object.entries({UAH: 'грн', USD: '$', EUR: '€', CHF: '₣', USDT: '₮'})) {
+for (const [code, mark] of Object.entries({UAH: '₴', USD: '$', EUR: '€', CHF: '₣', USDT: '₮'})) {
     equal(display.symbol(code, 'wrong'), mark, `${code} has its requested display symbol`);
     includes(display.format('123.45', code, 2), mark, `${code} formatting uses its display symbol`);
 }
-equal(display.symbol('₴', '₴'), 'грн', 'Legacy hryvnia glyphs follow the same policy');
-for (const [alias, mark] of Object.entries({'US$': '$', 'грн.': 'грн', 'грн': 'грн'})) {
+equal(display.symbol('₴', '₴'), '₴', 'Legacy hryvnia glyphs follow the same policy');
+for (const [alias, mark] of Object.entries({'US$': '$', 'грн.': '₴', 'грн': '₴'})) {
     equal(display.symbol(alias), mark, `${alias} raw marks normalize to the canonical display symbol`);
     equal(display.symbol(alias, alias), mark, `${alias} legacy marks normalize with their own fallback`);
     equal(display.symbol('TOKEN', alias), mark, `${alias} fallback marks normalize to the canonical display symbol`);
@@ -78,9 +78,9 @@ equal(result.mark, '₣', 'Legacy positional ISO symbols are normalized');
 equal(result.rest[0], 8, 'Legacy precision passes through unchanged');
 equal(result.rest[1], ',', 'Legacy thousands separator passes through unchanged');
 equal(result.rest[3], '%v %s', 'Legacy format pattern passes through unchanged');
-equal(legacy.formatMoney('1').mark, 'грн', 'Legacy default currency symbols are normalized');
+equal(legacy.formatMoney('1').mark, '₴', 'Legacy default currency symbols are normalized');
 equal(legacy.formatMoney('1', 'US$').mark, '$', 'Legacy accounting normalizes the US dollar alias');
-equal(legacy.formatMoney('1', 'грн.').mark, 'грн', 'Legacy accounting normalizes the dotted hryvnia alias');
+equal(legacy.formatMoney('1', 'грн.').mark, '₴', 'Legacy accounting normalizes the dotted hryvnia alias');
 const options = {symbol: 'USDT', precision: 8, decimal: ',', thousand: ' '};
 const objectResult = legacy.formatMoney('0.00000001', options);
 equal(objectResult.mark.symbol, '₮', 'Legacy option objects get display symbols');

@@ -33,7 +33,7 @@ assert.ok(component.netBox.net.every((value) => value.length > 0));
 assert.ok(component.netBox.net.some((value) => value.includes("0,000012") && value.includes("₮")));
 assert.ok(component.netBox.net.some((value) => value.includes("$")));
 assert.ok(component.netBox.net.some((value) => value.includes("€")));
-assert.ok(component.leftBox.left.some((value) => value.includes("грн") && !value.includes("₴")));
+assert.ok(component.leftBox.left.some((value) => value.includes("₴") && !value.includes("грн")));
 assert.equal(component.leftBox.left.length, 2);
 assert.equal(component.leftBox.perDay.length, 1);
 assert.equal(component.noMoneyLeft, false, "Different currencies must not be added to decide status");

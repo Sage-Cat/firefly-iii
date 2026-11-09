@@ -19,7 +19,7 @@ namespace FireflyIII\Support\Reports {
 
         public static function currency(string $code): object
         {
-            return (object) ['id' => 4, 'code' => $code, 'name' => 'Українська гривня', 'symbol' => 'грн', 'decimal_places' => 2];
+            return (object) ['id' => 4, 'code' => $code, 'name' => 'Українська гривня', 'symbol' => '₴', 'decimal_places' => 2];
         }
 
         public static function isDisplayRequest(): bool

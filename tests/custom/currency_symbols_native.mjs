@@ -52,14 +52,14 @@ const money = fs.readFileSync(path.join(build, moneyEntries[0].file), 'utf8');
 const exported = money.match(/export\s*\{([\w$]+)\s+as\s+[\w$]+\s*\}/);
 assert.ok(exported, 'The built money formatter exports its native binding.');
 vm.runInContext(money.replace(/export\s*\{[^}]+\};?/, '') + `\nglobalThis.nativeMoney=${exported[1]};`, context);
-for (const [code, mark] of Object.entries({UAH: 'грн', USD: '$', EUR: '€', CHF: '₣', USDT: '₮'})) {
+for (const [code, mark] of Object.entries({UAH: '₴', USD: '$', EUR: '€', CHF: '₣', USDT: '₮'})) {
     assert.ok(context.nativeMoney('123.45', code, 2).includes(mark));
 }
 assert.ok(context.nativeMoney('0.00000001', 'USDT', 8).includes('0,00000001'));
 assert.ok(context.nativeMoney('9007199254740993.01', 'EUR', 2).includes('993,01'));
 vm.runInContext(read('public/v1/js/lib/accounting.min.js'), context);
 context.accounting.settings.currency.symbol = 'UAH';
-assert.ok(context.accounting.formatMoney('123.45').includes('грн'));
+assert.ok(context.accounting.formatMoney('123.45').includes('₴'));
 assert.ok(context.accounting.formatMoney('123.45', 'CHF', 2).includes('₣'));
 assert.ok(context.accounting.formatMoney('0.00000001', 'USDT', 8).includes('₮'));
 assert.equal(context.accounting.settings.currency.symbol, 'UAH', 'Legacy defaults are not rewritten.');

@@ -147,12 +147,12 @@ namespace {
     $chart   = ExpenseProjection::revenueChartFrom($rows, $owned, '2026-11-01', '2026-11-09', 'owner');
     $entries = $chart[0]['entries'];
     check(
-        $entries === ['Client A' => '120.00', 'Client B' => '42.00', 'Інше' => '1.00'],
-        'All genuine income uses original native amounts converted through the current UAH bridge to EUR.'
+        $entries === ['Client A' => '6000.00', 'Client B' => '2100.00', 'Інше' => '50.00'],
+        'All genuine income uses original native amounts converted to the current NBU UAH value.'
     );
     check(
-        $chart[0]['currency_code'] === 'EUR' && $chart[0]['currency_symbol'] === '€' && $chart[0]['currency_decimal_places'] === 2,
-        'Revenue chart data and metadata stay EUR.'
+        $chart[0]['currency_code'] === 'UAH' && $chart[0]['currency_symbol'] === '₴' && $chart[0]['currency_decimal_places'] === 2,
+        'Revenue chart data and metadata stay UAH.'
     );
     check(!isset($entries['Refund A']) && !isset($entries['Refund B']), 'Neither linked nor unlinked refunds may create an income source.');
     check(count($entries) === 3, 'Opening balances, transfers, other owners, external destinations and outside dates do not become income.');
@@ -165,7 +165,6 @@ namespace {
         $day = new DateTimeImmutable($row['date'], new DateTimeZone('UTC'))
             ->setTimezone(new DateTimeZone('Europe/Kyiv'))
             ->format('Y-m-d');
-
         $ledgerRows[] = $row
         + [
             'id'             => $row['transaction_journal_id'],
@@ -176,9 +175,9 @@ namespace {
             'currency'       => $row['currency_code']
         ];
     }
-    $summary = ProfitSummary::build($ledgerRows, ReportingCurrency::$quotes, $owned, '2026-11-01', '2026-11-09', 'EUR');
+    $summary = ProfitSummary::build($ledgerRows, ReportingCurrency::$quotes, $owned, '2026-11-01', '2026-11-09', 'UAH');
     $total   = array_reduce($entries, static fn(string $sum, string $amount): string => bcadd($sum, $amount, 2), '0.00');
-    check($total === '163.00' && $total === $summary['totals']['income'], 'Revenue source totals exactly reconcile with the EUR income ledger.');
+    check($total === '8150.00' && $total === $summary['totals']['income'], 'Revenue source totals exactly reconcile with the UAH income ledger.');
     check(
         ExpenseProjection::revenueChartFrom($rows, $owned, '2026-11-09', '2026-11-01', 'owner')[0]['entries'] === $entries,
         'Reversed dates preserve the selected income period.'
@@ -205,7 +204,12 @@ namespace {
     ), 'Duplicate income journals must fail closed.');
     ReportingCurrency::$quotes['EUR'] = '100';
     check(
-        ExpenseProjection::revenueChartFrom([$rows[0]], $owned, '2026-11-01', '2026-11-09', 'owner')[0]['entries']['Client A'] === '50.00',
+        ExpenseProjection::revenueChartFrom([$rows[0]], $owned, '2026-11-01', '2026-11-09', 'owner')[0]['entries']['Client A'] === '5000.00',
+        'An unrelated EUR quote does not change USD income displayed in hryvnia.'
+    );
+    ReportingCurrency::$quotes['USD'] = '42';
+    check(
+        ExpenseProjection::revenueChartFrom([$rows[0]], $owned, '2026-11-01', '2026-11-09', 'owner')[0]['entries']['Client A'] === '5250.00',
         'A regenerated chart uses the current quote rather than saved primary values.'
     );
     unset(ReportingCurrency::$quotes['USD']);
