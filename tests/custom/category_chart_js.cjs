@@ -112,6 +112,14 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     const hue = name => Number(context.ledgerCategoryColor(name).background.match(/hsl\((\d+)/)[1]);
     assert.ok(Math.abs(hue('Продукти') - hue('Доставка їжі')) <= 10 && Math.abs(hue('Таксі') - hue('Пальне')) <= 10, 'Related categories inherit a common hue family');
     assert.ok(Math.abs(hue('Продукти') - hue('Цифрові сервіси')) > 60, 'Unrelated category families are visually distinct');
+    const safeCategoryHue = value => value >= 25 && value <= 60 || value >= 195 && value <= 290;
+    const paletteExamples = [...categoryNames, 'Комунальні платежі', 'Здоров’я', 'Подорожі', 'Сімейна підтримка', 'Повернення коштів', 'Зарплата', 'Послуги', 'Одяг', 'Витрати ФОП', ...Array.from({length: 1000}, (_, i) => 'Нова категорія ' + i)];
+    for (const name of paletteExamples) {
+        const colors = context.ledgerCategoryColor(name);
+        assert.ok(safeCategoryHue(Number(colors.background.match(/hsl\((\d+)/)[1])), 'Category fill excludes red, green and their bordering hue ranges');
+        assert.ok(safeCategoryHue(Number(colors.border.match(/hsl\((\d+)/)[1])), 'Category border follows the same restricted palette');
+    }
+
     assert.deepEqual(Array.from(chart.data.datasets[0].backgroundColor), Array.from(chart.data.labels, label => context.ledgerCategoryColor(label).background), 'Native rendering uses each selected category color after colorizeData');
     const shuffled = {labels: ['Продукти', 'Доставка їжі'], datasets: [{data: ['1.00', '9.00']}]};
     context.ledgerTopChartColors(shuffled, 'categories-chart', 'bar');
