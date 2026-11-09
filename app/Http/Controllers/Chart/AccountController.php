@@ -657,6 +657,12 @@ final class AccountController extends Controller
      */
     public function revenueAccounts(): JsonResponse
     {
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
+            $start = clone session('start', today(config('app.timezone'))->startOfMonth());
+            $end = clone session('end', today(config('app.timezone'))->endOfMonth());
+            return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::revenueChart($start, $end)));
+        }
+
         /** @var Carbon $start */
         $start                         = clone session('start', today(config('app.timezone'))->startOfMonth());
 

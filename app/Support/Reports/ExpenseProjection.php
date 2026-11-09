@@ -482,6 +482,70 @@ final class ExpenseProjection
         return self::amount($journal + ($currency ?? []), self::expenseRequest() ? 'UAH' : $fallback, true);
     }
 
+    public static function revenueChart(Carbon $start, Carbon $end): array
+    {
+        [$start, $end] = $end < $start ? [$end, $start] : [$start, $end];
+        $user       = auth()->user();
+        $repository = app(AccountRepositoryInterface::class);
+        $repository->setUser($user);
+        $assets = $repository->getAccountsByType(config('firefly.accountTypesByIdentifier.asset'));
+        if ($assets->isEmpty()) {
+            return self::revenueChartFrom([], [], $start->format('Y-m-d'), $end->format('Y-m-d'), (string) ($user->user_group_id ?? ''));
+        }
+        $collector = app(GroupCollectorInterface::class)
+            ->setUser($user)
+            ->setAccounts($assets)
+            ->setRange($start->copy()->subDay()->startOfDay(), $end->copy()->addDay()->endOfDay())
+            ->setTypes(['Deposit'])
+            ->withAccountInformation()
+            ->withCategoryInformation();
+        $rows = RefundProjection::annotate($collector->getExtractedJournals(), RefundProjection::metadata($user));
+
+        return self::revenueChartFrom($rows, $assets->pluck('id')->all(), $start->format('Y-m-d'), $end->format('Y-m-d'), (string) $user->user_group_id);
+    }
+
+    public static function revenueChartFrom(array $journals, array $ownedIds, string $start, string $end, string $owner): array
+    {
+        [$start, $end] = $end < $start ? [$end, $start] : [$start, $end];
+        $owned   = array_fill_keys(array_map('strval', $ownedIds), true);
+        $entries = [];
+        $seen    = [];
+        foreach ($journals as $journal) {
+            $source      = (string) ($journal['source_account_id'] ?? '');
+            $destination = (string) ($journal['destination_account_id'] ?? '');
+            if (
+                'Deposit' !== ($journal['transaction_type_type'] ?? '')
+                || RefundProjection::isRefund($journal)
+                || isset($owned[$source])
+                || !isset($owned[$destination])
+                || isset($journal['user_group_id']) && (string) $journal['user_group_id'] !== $owner
+                || self::day($journal) < $start
+                || self::day($journal) > $end
+            ) {
+                continue;
+            }
+            $id = (string) ($journal['transaction_journal_id'] ?? $journal['id'] ?? '');
+            if ('' === $id || isset($seen[$id])) {
+                throw new RuntimeException('Неоднозначна операція у графіку доходів.');
+            }
+            $seen[$id]      = true;
+            $name           = trim((string) ($journal['source_account_name'] ?? ''));
+            $name           = '' === $name ? 'Інше' : $name;
+            $entries[$name] = bcadd($entries[$name] ?? '0.00', self::amount($journal, 'EUR', true)['amount'], 2);
+        }
+        uasort($entries, static fn(string $left, string $right): int => bccomp($right, $left, 2));
+        $currency = ReportingCurrency::currency('EUR');
+
+        return [[
+            'label'                   => trans('firefly.earned'),
+            'type'                    => 'bar',
+            'currency_symbol'         => $currency->symbol,
+            'currency_code'           => $currency->code,
+            'currency_decimal_places' => $currency->decimal_places,
+            'entries'                 => $entries
+        ]];
+    }
+
     public static function spending(array $row, string $target = 'UAH'): string
     {
         $amount = self::amount($row, $target, true)['amount'];
