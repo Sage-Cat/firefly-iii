@@ -496,19 +496,19 @@ function ledgerCategoryColor(label) {
     var name = String(label || 'Інше').normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
     var families = [
         {pattern: /подат|бюджет|коміс|банків/, hue: 215, neutral: true},
-        {pattern: /продукт|харч|їж|ресторан|кафе/, hue: 145},
+        {pattern: /продукт|харч|їж|ресторан|кафе/, hue: 45},
         {pattern: /автомоб|пальн|таксі|транспорт|паркув|штраф|поштов/, hue: 205},
         {pattern: /цифров|підпис|програм|онлайн/, hue: 265},
         {pattern: /дім|житл|ремонт|комуналь|інтернет|зв[’']язок/, hue: 35},
-        {pattern: /здоров|ліки|медиц|догляд/, hue: 345},
+        {pattern: /здоров|ліки|медиц|догляд/, hue: 285},
         {pattern: /освіт|наук|навчан/, hue: 55},
-        {pattern: /подорож|дозвіл|відпоч|готел|розваг/, hue: 175},
-        {pattern: /сімейн|благод|переказ.*люд/, hue: 20},
-        {pattern: /покуп|одяг|взут/, hue: 295},
-        {pattern: /повернен/, hue: 160},
-        {pattern: /дохід|доход|зарплат|винагород|купон/, hue: 120},
+        {pattern: /подорож|дозвіл|відпоч|готел|розваг/, hue: 235},
+        {pattern: /сімейн|благод|переказ.*люд/, hue: 30},
+        {pattern: /покуп|одяг|взут/, hue: 280},
+        {pattern: /повернен/, hue: 200},
+        {pattern: /дохід|доход|зарплат|винагород|купон/, hue: 200},
         {pattern: /фоп|бізнес/, hue: 240},
-        {pattern: /послуг/, hue: 320},
+        {pattern: /послуг/, hue: 275},
         {pattern: /^інш|уточнен|переказ|реквізит/, hue: 215, neutral: true}
     ];
     var family = families.find(function (group) { return group.pattern.test(name); });
@@ -516,7 +516,10 @@ function ledgerCategoryColor(label) {
     for (var character of name) {
         hash = Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0;
     }
-    var hue = family ? (family.hue + hash % 11 - 5 + 360) % 360 : hash % 360;
+    // Reserve red and green for the expense and income account charts.
+    var offset = hash % 132;
+    var fallbackHue = offset < 36 ? 25 + offset : 195 + offset - 36;
+    var hue = family ? family.hue + hash % 11 - 5 : fallbackHue;
     var saturation = (family && family.neutral ? 22 : 62) + hash % 15;
     var lightness = 58 + (hash >>> 8) % 19;
     return {background: 'hsl(' + hue + ', ' + saturation + '%, ' + lightness + '%)',
