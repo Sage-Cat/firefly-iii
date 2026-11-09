@@ -32,6 +32,7 @@ This fork adds a Ukrainian finance reporting profile while retaining the upstrea
 - UAH expense and budget views with simplified navigation.
 - Shared display symbols for UAH (`грн`), EUR (`€`), USD (`$`), CHF (`₣`) and USDT (`₮`), including native and legacy amount formatters.
 - Four responsive dashboard summary tiles, with exact-zero cash-flow details omitted and all flow subtitles hidden in anonymous mode.
+- Independent 30-day, three-month and one-year selectors for all five homepage charts, using server dates in Europe/Kyiv and preserving other chart choices.
 - A compact, accessible payment-review page with the existing explicit category and transfer decisions preserved.
 - A single expense-chart tax bar for payees whose selected-period charges and linked refunds use only the exact confirmed tax categories; mixed and unknown payees remain separate.
 - Narrow Ukrainian interface overrides shared by native PHP translations and generated frontend JSON.

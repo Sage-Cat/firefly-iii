@@ -40,6 +40,13 @@ Both remain independent of chart dates and stack in the right-hand column.
 Original journal amounts and stored currency fields remain authoritative.
 The dashboard net worth endpoint is selected with `net_worth_eur=1`.
 Use `capital_period=30d`, `3m` or `1y` for its independent history range.
+The homepage uses the same choices independently for capital, budgets,
+categories, expense accounts and revenue accounts, defaulting to `30d`.
+Each link preserves the other selections and returns to its own chart anchor.
+Ranges come from the server's Europe/Kyiv calendar; they do not change the
+global calendar, session or stored movements. Budget spending is clipped to
+the selected range, while existing overlapping caps are retained without
+proration. Other budget API callers keep their original per-limit contract.
 Validated account-note snapshots fill earlier history in their original
 valuation currency. Known subsequent movements apply until verified native
 coverage starts; thereafter the original ledger wins. Incomplete totals
@@ -173,3 +180,21 @@ synthetic requests; an optional argument selects a disposable generated app
 root instead of this repository.
 English-only quick releases skip this overlay when both requested Ukrainian
 assets are absent; an incomplete generated pair is rejected.
+
+`dashboard_chart_periods.php` exercises calendar boundaries, independent
+query parameters and the actual four native controller projection guards,
+including owner scope, partial budget periods and unchanged global dates.
+`dashboard_chart_periods.mjs` checks same-origin URLs and server-supplied
+ranges without changing the source registry or global calendar. After the
+normal Vite build, verify the actual five chart callers, generated URLs,
+selector wrappers and source asset hashes/SRI:
+
+```sh
+node tests/custom/dashboard_chart_periods.mjs
+node tests/custom/dashboard_period_native.mjs
+node tests/custom/dashboard_period_layout.mjs node_modules/chart.js/dist/chart.umd.js public/v1/js/ff/charts.js resources/assets/v3/js/shared/draw-chart.js public/v1/js/lib/Chart.bundle.min.js
+```
+
+The last check uses a fresh headless Chrome profile with synthetic responses.
+It verifies desktop/mobile plot bounds and that both native chart runtimes
+keep period controls visible after empty or failed requests.
