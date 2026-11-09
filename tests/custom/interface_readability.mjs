@@ -56,8 +56,8 @@ function verifyViews(directory) {
 }
 verifyViews(path.join(root, 'resources/views'));
 assert.equal(legacyViews, 16);
-const order = ['categories-chart', 'revenue-accounts-chart', 'expense-accounts-chart'].map(id => native.view.indexOf(`id="${id}"`));
-assert.ok(order.every(position => position >= 0) && order[0] < order[1] && order[1] < order[2], 'Income and spending cards must follow categories in that order');
+const order = ['categories-chart', 'expense-accounts-chart', 'revenue-accounts-chart'].map(id => native.view.indexOf(`id="${id}"`));
+assert.ok(order.every(position => position >= 0) && order[0] < order[1] && order[1] < order[2], 'Expense and income rankings must follow categories in that order');
 assert.ok(order[2] < native.view.indexOf('id="all_transactions"'), 'Both cards stay in the main chart column');
 let draw = read('node_modules/chart.js/dist/chart.umd.js') + ';window.Chart4=window.Chart;';
 const drawSource = read('resources/assets/v3/js/shared/draw-chart.js').replace(/^import[^\n]*\n/gm, '')
@@ -73,7 +73,7 @@ const typography = '<style>' + rootRules[0] + '</style>';
 native.css = native.css.replace(rootRules[0], '');
 assert.ok(!/!important|\bbody\s*\{|\bbutton\s*\{/.test(typography), 'Typography scales the root instead of overriding controls');
 const toolbar = '<div class="dashboard-chart-period d-flex flex-wrap align-items-center gap-2 mb-2"><div class="btn-group btn-group-sm"><a class="btn btn-primary">30 днів</a><a class="btn btn-outline-secondary">3 міс</a><a class="btn btn-outline-secondary">1 рік</a></div><span class="small text-muted">11.10.2026–09.11.2026 · ₴</span></div>';
-const chartNames = ['accounts-chart', 'budgets-chart', 'categories-chart', 'revenue-accounts-chart', 'expense-accounts-chart'];
+const chartNames = ['accounts-chart', 'budgets-chart', 'categories-chart', 'expense-accounts-chart', 'revenue-accounts-chart'];
 const chartColumn = native.view.slice(native.view.indexOf('    <div class="row" x-data="index">'), native.view.indexOf('<div class="col-lg-4 col-md-12 col-sm-12" id="all_transactions">'))
     .replace(/@include\('reports\.dashboard-(?:capital-note|chart-period)'[^\n]*/g, toolbar)
     .replace(/\{\{[\s\S]*?\}\}/g, expression => expression.includes('expense_accounts') ? 'Рахунки витрат'
@@ -84,12 +84,15 @@ const budget = `<div class="card"><div class="card-header"><h2 class="card-title
 const profit = `<div class="card card-body"><h2>Доходи, витрати та результат</h2><div class="d-flex flex-wrap gap-3 mb-3"><div class="btn-group"><a class="btn btn-sm btn-primary">₴</a><a class="btn btn-sm btn-outline-secondary">€</a></div><div class="btn-group"><a class="btn btn-sm btn-outline-secondary">30 днів</a><a class="btn btn-sm btn-outline-secondary">3 місяці</a><a class="btn btn-sm btn-outline-secondary">1 рік</a></div></div><form class="row g-2 align-items-end"><div class="col-sm-4"><label class="form-label">Від</label><input type="date" class="form-control" value="2026-10-11"></div><div class="col-sm-4"><label class="form-label">До</label><input type="date" class="form-control" value="2026-11-09"></div><div class="col-sm-4"><button class="btn btn-primary" type="button">Показати</button></div></form><p class="small mt-2">Валюта цього звіту не змінює основну валюту системи.</p>${table}</div>`;
 const subscriptions = '<aside id="subscription-overview" class="card"><div class="card-header"><h2 class="card-title">Витрати на підписки</h2></div><div class="card-body"><p class="small">Середня місячна вартість активних підписок.</p><div class="fs-3">12 345,67 ₴</div><ul class="list-unstyled"><li class="d-flex gap-2 align-items-start py-2 border-bottom"><span class="subscription-swatch"></span><a class="subscription-name flex-grow-1">Хмарне сховище та інструменти для роботи</a><span class="text-nowrap fw-semibold">1 234,56 ₴</span></li></ul></div></aside>';
 const review = '<div id="payment-review"><article class="payment-card card"><div class="payment-card-header"><div><div class="payment-meta">09.11.2026 · Особистий рахунок</div><h2 class="payment-card-title payment-description">Оплата робочих інструментів і послуг</h2></div><div class="payment-amount-block"><span class="payment-amount-label">Сума</span><strong class="payment-amount">1 234,56 ₴</strong></div></div><div class="payment-card-body"><div class="payment-category-layout"><div class="payment-choice"><label class="payment-section-title">Категорія</label><div class="payment-select-row"><select class="form-select"><option>Робочі інструменти</option></select><button class="btn btn-primary">Зберегти</button></div></div><div><p class="payment-hint">Рекомендовані категорії</p><button class="payment-recommendation btn"><span class="payment-recommendation-name">Підписки та сервіси</span></button></div></div></div></article></div>';
+assert.equal((native.view.match(/^\s*@section\(/gm) || []).length, 2, 'Content and script sections must both open');
+assert.equal((native.view.match(/^\s*@endsection\s*$/gm) || []).length, 2, 'Renaming headings preserves both complete Blade sections');
+assert.ok(native.view.includes('Рахунки витрат. Топ 3') && native.view.includes('Рахунки доходів. Топ 3') && native.view.includes('Категорії. Топ 5'), 'Native headings identify the visible rankings');
 assert.match(native.budget, /class="card-body p-0 table-responsive">\s*<table[^>]*id="budgetList"/, 'The native budget table scrolls inside its card when enlarged text needs more width');
 assert.equal((native.budget.match(/data-bs-config='\{"popperConfig":\{"strategy":"fixed"\}\}'/g) || []).length, 3, 'Every native budget action and limit dropdown uses viewport positioning');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'interface-readability-'));
 const safeScript = text => text.replace(/<\/script/gi, '<\\/script');
 try {
-    for (const [width, increased] of [[1440, false], [1440, true], [720, true], [390, true]]) {
+    for (const [width, increased] of [[1440, false], [1440, true], [768, true], [720, true], [390, true]]) {
         const charts = String.raw`
 window.errors=[];window.addEventListener('error',event=>window.errors.push(event.message));
 window.chartInstances=[];
@@ -99,7 +102,7 @@ const Chart=index<2?window.Chart4:window.Chart;
 const options={responsive:true,maintainAspectRatio:false,animation:false};
 window.chartInstances.push(new Chart(document.getElementById(id),{type:'bar',data:{labels:['Жовтень','Листопад'],datasets:[{label:'Приклад',data:[10,20]}]},options}));
 }
-setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);const controls=Array.from(document.querySelectorAll('input,select,button,.btn'));document.body.setAttribute('data-check',JSON.stringify({width:innerWidth,page:document.documentElement.scrollWidth,root:css('html'),body:css('body'),heading:css('#type-heading'),small:css('#type-small'),normal:css('#type-normal'),button:css('#type-button'),smallButton:css('#type-small-button'),largeButton:css('#type-large-button'),input:css('#type-input'),fonts:[window.Chart4.defaults.font.size,window.Chart.defaults.global.defaultFontSize],widgetAmount:document.querySelector('#all_transactions .money-negative').textContent,widgetWhiteSpace:getComputedStyle(document.querySelector('#all_transactions .money-negative')).whiteSpace,canvas:window.chartInstances.map(chart=>({height:chart.canvas.getBoundingClientRect().height,width:chart.canvas.getBoundingClientRect().width})),overflow:controls.filter(node=>node.getBoundingClientRect().right>innerWidth+1||node.getBoundingClientRect().left< -1).map(node=>node.outerHTML.slice(0,100)),order:Array.from(document.querySelectorAll('[data-chart]')).map(node=>node.dataset.chart),errors:window.errors}));},1000);
+setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);const controls=Array.from(document.querySelectorAll('input,select,button,.btn'));const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,right:r.right}};document.body.setAttribute('data-check',JSON.stringify({width:innerWidth,page:document.documentElement.scrollWidth,root:css('html'),body:css('body'),heading:css('#type-heading'),small:css('#type-small'),normal:css('#type-normal'),button:css('#type-button'),smallButton:css('#type-small-button'),largeButton:css('#type-large-button'),input:css('#type-input'),pair:{expense:rect('.dashboard-account-expense'),revenue:rect('.dashboard-account-revenue'),sidebar:rect('#all_transactions')},fonts:[window.Chart4.defaults.font.size,window.Chart.defaults.global.defaultFontSize],widgetAmount:document.querySelector('#all_transactions .money-negative').textContent,widgetWhiteSpace:getComputedStyle(document.querySelector('#all_transactions .money-negative')).whiteSpace,canvas:window.chartInstances.map(chart=>({height:chart.canvas.getBoundingClientRect().height,width:chart.canvas.getBoundingClientRect().width})),overflow:controls.filter(node=>node.getBoundingClientRect().right>innerWidth+1||node.getBoundingClientRect().left< -1).map(node=>node.outerHTML.slice(0,100)),order:Array.from(document.querySelectorAll('[data-chart]')).map(node=>node.dataset.chart),errors:window.errors}));},1000);
 `;
         const html = '<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>' + native.css + '</style>'
             + (increased ? typography : '') + styles('dashboard-capital-note.blade.php') + styles('dashboard-chart-period-scripts.blade.php') + styles('subscription-overview.blade.php') + styles('payment-review.blade.php')
@@ -126,6 +129,12 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
         assert.equal(result.widgetWhiteSpace, 'nowrap', 'The mobile wrapping rule respects nowrap amounts');
         assert.ok(result.page <= result.width + 1 && result.overflow.length === 0, 'Representative money UI must not overflow horizontally: ' + JSON.stringify(result));
         assert.deepEqual(result.order, chartNames);
+        if (width >= 768) {
+            assert.ok(Math.abs(result.pair.expense.y - result.pair.revenue.y) < 1 && result.pair.expense.right <= result.pair.revenue.x + 1, 'Expense and revenue must share a row, in that order');
+        } else {
+            assert.ok(result.pair.expense.y < result.pair.revenue.y && Math.abs(result.pair.expense.x - result.pair.revenue.x) < 1, 'Narrow screens stack expense before revenue');
+        }
+        if (width >= 992) assert.ok(result.pair.revenue.right <= result.pair.sidebar.x + 1, 'Both ranking cards remain to the left of the account lists');
         assert.ok(result.canvas.every((canvas, index) => Math.abs(canvas.height - (result.width <= 767 ? 280 : index === 0 ? 360 : 400)) <= 1 && canvas.width > 0 && canvas.width <= result.width), 'Existing desktop/mobile chart height constraints are preserved: ' + JSON.stringify(result.canvas));
     }
     for (const width of [390, 1440]) {
