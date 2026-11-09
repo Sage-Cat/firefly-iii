@@ -59,7 +59,7 @@
             <div class="card mb-2 card-outline">
                 <div class="card-header">
                     <div class="card-title"><a href="{{ route('categories.index') }}"
-                                               title="Категорії. Топ 5">Категорії. Топ 5</a>
+                                               title="Категорії. Топ 7">Категорії. Топ 7</a>
                     </div>
 
                 </div>

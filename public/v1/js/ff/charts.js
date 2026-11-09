@@ -458,7 +458,7 @@ function drawAChart(URL, container, chartType, options, colorData) {
 
 function ledgerTopChartData(data, container, chartType) {
     "use strict";
-    var limits = {'categories-chart': 5, 'expense-accounts-chart': 3, 'revenue-accounts-chart': 3};
+    var limits = {'categories-chart': 7, 'expense-accounts-chart': 3, 'revenue-accounts-chart': 3};
     var limit = Object.hasOwn(limits, container) ? limits[container] : 0;
     if (!limit || 'bar' !== chartType || typeof data === 'undefined' || Array.isArray(data) && data.length === 0
         || data && Array.isArray(data.labels) && data.labels.length === 0) {
@@ -491,10 +491,50 @@ function ledgerTopChartData(data, container, chartType) {
         labels: ranked.map(function (row) { return row.label; }), datasets: ranked.length ? [selected] : []});
 }
 
+function ledgerCategoryColor(label) {
+    "use strict";
+    var name = String(label || 'Інше').normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+    var families = [
+        {pattern: /подат|бюджет|коміс|банків/, hue: 215, neutral: true},
+        {pattern: /продукт|харч|їж|ресторан|кафе/, hue: 145},
+        {pattern: /автомоб|пальн|таксі|транспорт|паркув|штраф|поштов/, hue: 205},
+        {pattern: /цифров|підпис|програм|онлайн/, hue: 265},
+        {pattern: /дім|житл|ремонт|комуналь|інтернет|зв[’']язок/, hue: 35},
+        {pattern: /здоров|ліки|медиц|догляд/, hue: 345},
+        {pattern: /освіт|наук|навчан/, hue: 55},
+        {pattern: /подорож|дозвіл|відпоч|готел|розваг/, hue: 175},
+        {pattern: /сімейн|благод|переказ.*люд/, hue: 20},
+        {pattern: /покуп|одяг|взут/, hue: 295},
+        {pattern: /повернен/, hue: 160},
+        {pattern: /дохід|доход|зарплат|винагород|купон/, hue: 120},
+        {pattern: /фоп|бізнес/, hue: 240},
+        {pattern: /послуг/, hue: 320},
+        {pattern: /^інш|уточнен|переказ|реквізит/, hue: 215, neutral: true}
+    ];
+    var family = families.find(function (group) { return group.pattern.test(name); });
+    var hash = 2166136261;
+    for (var character of name) {
+        hash = Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0;
+    }
+    var hue = family ? (family.hue + hash % 11 - 5 + 360) % 360 : hash % 360;
+    var saturation = (family && family.neutral ? 22 : 62) + hash % 15;
+    var lightness = 58 + (hash >>> 8) % 19;
+    return {background: 'hsl(' + hue + ', ' + saturation + '%, ' + lightness + '%)',
+        border: 'hsl(' + hue + ', ' + saturation + '%, ' + (lightness - 18) + '%)'};
+}
+
 function ledgerTopChartColors(data, container, chartType) {
     "use strict";
     var palette = {'expense-accounts-chart': ['#fca5a5', '#f87171'], 'revenue-accounts-chart': ['#86efac', '#4ade80']};
     var colors = 'bar' === chartType && Object.hasOwn(palette, container) ? palette[container] : null;
+    if ('bar' === chartType && 'categories-chart' === container) {
+        var categoryColors = data.labels.map(ledgerCategoryColor);
+        data.datasets.forEach(function (dataset) {
+            dataset.backgroundColor = categoryColors.map(function (color) { return color.background; });
+            dataset.borderColor = categoryColors.map(function (color) { return color.border; });
+            dataset.borderWidth = 1;
+        });
+    }
     if (colors) {
         data.datasets.forEach(function (dataset) {
             dataset.backgroundColor = colors[0];
