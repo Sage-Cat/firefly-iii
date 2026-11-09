@@ -262,7 +262,7 @@ final class ShowController extends Controller
             'budgetLimit'    => $budgetLimit,
             'groups'         => $groups,
             'subTitle'       => $subTitle,
-            'currencySymbol' => '₴',
+            'currencySymbol' => 'грн',
         ]);
     }
 }

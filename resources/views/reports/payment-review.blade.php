@@ -37,7 +37,7 @@
                         <div class="text-muted small mb-1">{{ $payment['date'] }} · {{ $payment['account'] }}</div>
                         <h2 id="payment-title-{{ $payment['id'] }}" class="card-title payment-description">{{ $payment['description'] }}</h2>
                     </div>
-                    <div class="fw-semibold payment-amount {{ $payment['incoming'] ? 'text-success-emphasis' : 'text-danger-emphasis' }}">{{ $payment['incoming'] ? '+' : '−' }}{{ \FireflyIII\Support\Reports\ProfitSummary::money($payment['amount']) }} {{ $payment['currency'] }}</div>
+                    <div class="fw-semibold payment-amount {{ $payment['incoming'] ? 'text-success-emphasis' : 'text-danger-emphasis' }}">{{ $payment['incoming'] ? '+' : '−' }}{{ \FireflyIII\Support\Reports\ProfitSummary::money($payment['amount']) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($payment['currency']) }}</div>
                 </div>
                 <div class="card-body">
                     @if($payment['blocked'])
@@ -69,7 +69,7 @@
                             <label class="form-label" for="payment-account-{{ $payment['id'] }}">Власний переказ {{ $payment['review']['direction'] === 'in' ? 'з рахунку' : 'на рахунок' }}</label>
                             <div class="d-flex flex-wrap gap-2">
                                 <select class="form-select flex-grow-1 w-auto" id="payment-account-{{ $payment['id'] }}" name="account_id" required>
-                                    <option value="">Обери власний рахунок · {{ $payment['currency'] }}</option>
+                                    <option value="">Обери власний рахунок · {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($payment['currency']) }}</option>
                                     @foreach($accounts as $account)
                                         @if($account['active'] && !$account['suspense'] && $account['currency'] === $payment['currency'] && $account['id'] !== (string) $payment['review']['account_id'])
                                             <option value="{{ $account['id'] }}">{{ $account['name'] }}</option>

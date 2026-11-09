@@ -23,7 +23,7 @@
         <script nonce="{{ $JS_NONCE }}">
             const subscriptionCosts = @json($subscriptionOverview['rows']);
             const subscriptionColors = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#2dd4bf', '#f472b6', '#60a5fa'];
-            const subscriptionMoney = new Intl.NumberFormat('uk-UA', {style: 'currency', currency: 'UAH'});
+            const subscriptionMoney = {format: value => window.fireflyCurrencyDisplay.format(value, 'UAH')};
             new Chart(document.getElementById('subscription-cost-chart').getContext('2d'), {
                 type: 'doughnut',
                 data: {

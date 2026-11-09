@@ -458,7 +458,7 @@ function ledgerBarChartOptions(options, data, container) {
     var datasets = data.datasets;
     datasets.forEach(function (dataset) {
         if ('revenue-accounts-chart' !== container
-            && ((dataset.currency_code && 'UAH' !== dataset.currency_code) || '₴' !== dataset.currency_symbol)) {
+            && ((dataset.currency_code && 'UAH' !== dataset.currency_code) || ['₴', 'грн'].indexOf(dataset.currency_symbol) === -1)) {
             throw new Error('Category expenses require UAH data and currency metadata.');
         }
         if (typeof dataset.currency_symbol !== 'string' || '' === dataset.currency_symbol) {

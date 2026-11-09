@@ -27,27 +27,10 @@ import formatDate from "../../util/format-date.js";
 
 let afterPromises = false;
 let dashboardCurrencyDecimals = {};
+let dashboardCurrencySymbols = {};
 
 function dashboardMoney(amount, currencyCode) {
-    if (
-        typeof currencyCode === "string" &&
-        currencyCode.length > 3 &&
-        currencyCode.length <= 12 &&
-        (typeof amount === "number" || typeof amount === "string") &&
-        Number.isFinite(Number(amount))
-    ) {
-        const places = dashboardCurrencyDecimals[currencyCode];
-        const digits = Number.isInteger(places) && places >= 0 && places <= 12 ? places : 8;
-        return (
-            new Intl.NumberFormat(window.__localeId__.replace("_", "-"), {
-                minimumFractionDigits: Math.min(2, digits),
-                maximumFractionDigits: digits,
-            }).format(Number(amount)) +
-            " " +
-            currencyCode
-        );
-    }
-    return formatMoney(amount, currencyCode);
+    return formatMoney(amount, currencyCode, dashboardCurrencyDecimals[currencyCode], dashboardCurrencySymbols[currencyCode]);
 }
 
 export default () => ({
@@ -108,9 +91,11 @@ export default () => ({
     },
     generateOptions(data) {
         dashboardCurrencyDecimals = {};
+        dashboardCurrencySymbols = {};
         Object.values(data || {}).forEach((row) => {
             if (row && typeof row.currency_code === "string" && Number.isInteger(row.currency_decimal_places)) {
                 dashboardCurrencyDecimals[row.currency_code] = row.currency_decimal_places;
+                dashboardCurrencySymbols[row.currency_code] = row.currency_symbol;
             }
         });
         this.balanceBox = { amounts: [], subtitles: [] };

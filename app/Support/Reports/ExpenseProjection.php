@@ -143,7 +143,7 @@ final class ExpenseProjection
         $series   = [];
         foreach (['Withdrawal' => ['spent', 'rgba(219, 68, 55, 0.5)'], 'Deposit' => ['earned', 'rgba(0, 141, 76, 0.5)']] as $type => [$label, $colour]) {
             $series[$type] = [
-                'label'           => trans('firefly.' . $label) . ' (UAH)',
+                'label'           => trans('firefly.' . $label) . ' (грн)',
                 'entries'         => $entries,
                 'type'            => 'bar',
                 'backgroundColor' => $colour,

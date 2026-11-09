@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="{{ __('config.html_language') }}">
 <head>
+    {{-- currency-display --}}
+    <script src="{{ asset('v1/js/ff/currency-display.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/currency-display.js')), 0, 12) }}" nonce="{{ $JS_NONCE ?? '' }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/currency-display.js'), true)) }}" crossorigin="anonymous"></script>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">

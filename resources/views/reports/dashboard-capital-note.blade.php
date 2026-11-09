@@ -10,7 +10,7 @@
             <a class="btn {{ $capital['period'] === $period ? 'btn-primary' : 'btn-outline-secondary' }}" href="{{ url('/').'?capital_period='.$period }}">{{ $label }}</a>
         @endforeach
     </div>
-    <span class="text-muted small">{{ \Carbon\Carbon::parse($capital['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($capital['end'])->format('d.m.Y') }} · EUR · НБУ на {{ \FireflyIII\Support\Reports\ReportingCurrency::today()->format('d.m.Y') }}</span>
+    <span class="text-muted small">{{ \Carbon\Carbon::parse($capital['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($capital['end'])->format('d.m.Y') }} · € · НБУ на {{ \FireflyIII\Support\Reports\ReportingCurrency::today()->format('d.m.Y') }}</span>
 </div>
 @if($capital['error'])
     <p class="text-warning" role="status">{{ $capital['error'] }}</p>

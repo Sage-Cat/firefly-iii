@@ -11,7 +11,7 @@
             <div class="d-flex flex-wrap gap-4">
             @foreach(['EUR', 'USD', 'CHF'] as $code)
                 @php($quoteText = str_contains($nbuTodayQuotes[$code], '.') ? rtrim(rtrim($nbuTodayQuotes[$code], '0'), '.') : $nbuTodayQuotes[$code])
-                <span><strong>1 {{ $code }}</strong> = {{ str_replace('.', ',', $quoteText) }} ₴</span>
+                <span><strong>1 {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($code) }}</strong> = {{ str_replace('.', ',', $quoteText) }} грн</span>
             @endforeach
             </div>
             <p class="text-muted small mb-0 mt-2">Офіційний курс до гривні. Оновлюється автоматично.</p>

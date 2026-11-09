@@ -9,7 +9,7 @@
             <!--ACCOUNTS -->
             <div class="card mb-2 card-outline">
                 <div class="card-header">
-                    <div class="card-title">Чисті активи · EUR
+                    <div class="card-title">Чисті активи · €
                     </div>
                 </div>
                 <div class="card-body">

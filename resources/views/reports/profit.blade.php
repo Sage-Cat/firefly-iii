@@ -20,7 +20,7 @@
                     <p class="mb-3">Доходи, витрати та різниця за всіма особистими й ФОП-рахунками разом.</p>
                     <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
                         <div class="btn-group" role="group" aria-label="Валюта звіту">
-                            @foreach(['EUR' => '€ EUR', 'UAH' => '₴ UAH'] as $code => $label)
+                            @foreach(['EUR' => '€', 'UAH' => 'грн'] as $code => $label)
                                 <a class="btn btn-sm {{ $currency === $code ? 'btn-primary' : 'btn-outline-secondary' }}"
                                    href="{{ route('reports.profit', ['currency' => $code, 'months' => $months, 'start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')]) }}">{{ $label }}</a>
                             @endforeach
@@ -62,7 +62,7 @@
                             <div class="card h-100">
                                 <div class="card-body">
                                     <div class="text-muted mb-2">{{ $label }}</div>
-                                    <div class="fs-3 fw-semibold {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($summary['totals'][$key]) }} {{ $currency === 'EUR' ? '€' : '₴' }}</div>
+                                    <div class="fs-3 fw-semibold {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($summary['totals'][$key]) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</div>
                                     @if($key === 'net')<div class="small text-muted mt-1">Доходи мінус витрати</div>@endif
                                 </div>
                             </div>
@@ -70,7 +70,7 @@
                     @endforeach
                 </div>
                 <div class="card mb-3">
-                    <div class="card-header"><h3 class="card-title">Доходи, витрати та результат · {{ $currency }}</h3></div>
+                    <div class="card-header"><h3 class="card-title">Доходи, витрати та результат · {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</h3></div>
                     <div class="card-body">
                         <div id="profit-chart-wrap"><canvas id="profit-chart" role="img" aria-label="Зведені доходи, витрати й залишок після витрат"></canvas></div>
                     </div>
@@ -82,7 +82,7 @@
         @if(!$reportError)
             <div class="col-xl-5">
                 <div class="card mb-3">
-                    <div class="card-header"><h3 class="card-title">Підсумки за місяцями · {{ $currency }}</h3></div>
+                    <div class="card-header"><h3 class="card-title">Підсумки за місяцями · {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</h3></div>
                     <div class="table-responsive">
                         <table id="profit-breakdown" class="table table-striped mb-0 caption-top">
                             <caption class="px-3">Останні 3 календарні місяці: {{ $monthlyStart->format('d.m.Y') }}–{{ $monthlyEnd->format('d.m.Y') }}, незалежно від періоду графіка. Поточний місяць враховано до сьогодні.</caption>
@@ -91,16 +91,16 @@
                             @foreach($monthlySummary['points'] as $point)
                                 <tr>
                                     <td>{{ \Carbon\Carbon::parse($point['period'].'-01')->translatedFormat('F Y') }}<div class="small text-muted">{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</div></td>
-                                    @foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($point['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<td class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }} {{ $currency === 'EUR' ? '€' : '₴' }}</td>@endforeach
+                                    @foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($point['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<td class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point[$key]) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</td>@endforeach
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th>Разом</th>@foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($monthlySummary['totals']['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<th class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }} {{ $currency === 'EUR' ? '€' : '₴' }}</th>@endforeach</tr></tfoot>
+                            <tfoot><tr><th>Разом</th>@foreach(['income' => 'text-success-emphasis profit-income', 'expenses' => 'text-danger-emphasis profit-expenses', 'net' => bccomp($monthlySummary['totals']['net'], '0', 2) < 0 ? 'text-danger-emphasis profit-expenses' : 'text-info-emphasis profit-net'] as $key => $color)<th class="text-end {{ $color }}">{{ \FireflyIII\Support\Reports\ProfitSummary::money($monthlySummary['totals'][$key]) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</th>@endforeach</tr></tfoot>
                         </table>
                     </div>
                 </div>
                 <div class="card mb-3">
-                    <div class="card-header"><h3 class="card-title">Тижневі витрати за останні 3 місяці · {{ $currency }}</h3></div>
+                    <div class="card-header"><h3 class="card-title">Тижневі витрати за останні 3 місяці · {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</h3></div>
                     <div class="table-responsive">
                         <table id="profit-weekly-expenses" class="table table-striped mb-0 caption-top">
                             <caption class="px-3">Останні 3 місяці: {{ $weeklyStart->format('d.m.Y') }}–{{ $weeklyEnd->format('d.m.Y') }}, незалежно від періоду графіка. Тижні тривають з понеділка до неділі; крайні тижні обмежено цими датами.</caption>
@@ -110,11 +110,11 @@
                                 <tr>
                                     <td>{{ $point['period'] }}</td>
                                     <td>{{ \Carbon\Carbon::parse($point['start'])->format('d.m.Y') }}–{{ \Carbon\Carbon::parse($point['end'])->format('d.m.Y') }}</td>
-                                    <td class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }} {{ $currency === 'EUR' ? '€' : '₴' }}</td>
+                                    <td class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($point['expenses']) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</td>
                                 </tr>
                             @endforeach
                             </tbody>
-                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }} {{ $currency === 'EUR' ? '€' : '₴' }}</th></tr></tfoot>
+                            <tfoot><tr><th colspan="2">Разом</th><th class="text-end text-danger-emphasis profit-expenses">{{ \FireflyIII\Support\Reports\ProfitSummary::money($weeklySummary['totals']['expenses']) }} {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</th></tr></tfoot>
                         </table>
                     </div>
                 </div>
@@ -131,7 +131,7 @@
             const profitPoints = @json($summary['points']);
             const profitCurrency = @json($currency);
             const profitDaily = @json($summary['daily']);
-            const profitMoney = new Intl.NumberFormat('uk-UA', {style: 'currency', currency: profitCurrency});
+            const profitMoney = {format: value => window.fireflyCurrencyDisplay.format(value, profitCurrency)};
             const profitLabels = profitPoints.map(function (point) {
                 const date = new Date(point.period + (profitDaily ? 'T12:00:00' : '-01T12:00:00'));
                 return date.toLocaleDateString('uk-UA', profitDaily ? {day: '2-digit', month: '2-digit'} : {month: 'short', year: 'numeric'});
