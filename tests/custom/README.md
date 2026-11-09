@@ -129,3 +129,47 @@ payment fingerprints. The authorization suite loads the native
 retains the marker while explicit category edits finalize it. Python fixtures
 cover fallback opt-in, idempotent repeats and confirmed classification/refund
 upgrades without changing financial movements.
+
+Dashboard module checks also cover the restored subscription summary tile,
+exact signed/exponent zeroes, tiny nonzero flows, API entry order, anonymous
+masking and filtered subtitle separators. Detailed subscription and savings
+widgets remain hidden; the savings startup request remains disabled.
+Expense checks verify tax-only payee grouping, mixed/unknown categories and
+linked refund credits while retaining the original signed chart total and
+conversion count. Payment-review layout changes preserve the native POST
+actions, hidden scope fields and CSRF directives.
+
+`ukrainian_ui.php` checks 36 reviewed labels, English fallbacks, interpolation,
+unchanged plurals, native view bindings, all six CSP layouts and the generated
+JSON overlay. It requires native Ukrainian locale files and generated JSON;
+`FIREFLY_TEST_APP_ROOT` can supply these from a separate installation. The
+checked dictionaries, views, build overlay and cache helper always come from
+this repository. `ukrainian_ui_cache.mjs` verifies that only the two exact
+Ukrainian translation cache keys are invalidated once per dictionary revision;
+preferences, sessions, financial caches and other locales remain untouched.
+The helper receives a content revision from the native PHP layout, covering
+the four reviewed dictionaries and both served Ukrainian JSON assets. It uses
+that same revision for LocalStorage and only the Ukrainian HTTP request URLs,
+including when storage is disabled or already current.
+
+The PHP loader merges `resources/lang-overrides` without changing core locale
+files. The upstream `ff3:json-translations v3` tool reads core files directly,
+so the release workflow runs the native build overlay immediately afterwards:
+
+```sh
+php .ci/translation-overrides.php
+node tests/custom/ukrainian_ui_cache.mjs
+node tests/custom/ukrainian_ui_i18next.mjs
+```
+
+Run that overlay after normal JSON generation for local release builds too.
+It replaces only reviewed keys already present in `uk-UA.json` and `uk.json`
+(also `uk_UA.json` when generated), preserving other keys and locales. Generated
+translation assets remain ignored by Git. The content revision follows
+dictionary and generated JSON changes automatically; the PHP fixture proves
+that unrelated locale updates do not change it. The i18next
+check uses the actual native source callback and installed HTTP backend with
+synthetic requests; an optional argument selects a disposable generated app
+root instead of this repository.
+English-only quick releases skip this overlay when both requested Ukrainian
+assets are absent; an incomplete generated pair is rejected.
