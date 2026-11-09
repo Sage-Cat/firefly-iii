@@ -88,9 +88,14 @@ final class AccountController extends Controller
     {
         if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
             $start = clone session('start', today(config('app.timezone'))->startOfMonth());
-            $end = clone session('end', today(config('app.timezone'))->endOfMonth());
+            $end   = clone session('end', today(config('app.timezone'))->endOfMonth());
+            [$start, $end] = \FireflyIII\Support\Reports\DashboardChartPeriods::requestRange($start, $end);
             $accounts = $this->accountRepository->getAccountsByType([AccountTypeEnum::EXPENSE->value]);
-            return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::accountChart($start->startOfDay(), $end->endOfDay(), $accounts)));
+            return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::accountChart(
+                $start->startOfDay(),
+                $end->endOfDay(),
+                $accounts
+            )));
         }
 
         Log::debug('ExpenseAccounts');
@@ -659,7 +664,8 @@ final class AccountController extends Controller
     {
         if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
             $start = clone session('start', today(config('app.timezone'))->startOfMonth());
-            $end = clone session('end', today(config('app.timezone'))->endOfMonth());
+            $end   = clone session('end', today(config('app.timezone'))->endOfMonth());
+            [$start, $end] = \FireflyIII\Support\Reports\DashboardChartPeriods::requestRange($start, $end);
             return response()->json($this->generator->multiSet(\FireflyIII\Support\Reports\ExpenseProjection::revenueChart($start, $end)));
         }
 

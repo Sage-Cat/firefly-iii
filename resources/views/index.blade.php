@@ -35,7 +35,12 @@
                 </div>
                 <div class="card-body">
                     <div>
-                        <canvas id="budgets-chart" class="wide-chart" height="400" width="100%"></canvas>
+                        @include('reports.dashboard-chart-period', ['chart' => 'budget', 'currency' => 'грн'])
+                        <div class="dashboard-period-chart card-body p-0">
+                            <div class="dashboard-period-canvas">
+                                <canvas id="budgets-chart" class="wide-chart" height="400" width="100%"></canvas>
+                            </div>
+                        </div>
                     </div>
                     <!--
                     <div>
@@ -59,7 +64,12 @@
 
                 </div>
                 <div class="card-body">
-                    <canvas id="categories-chart" class="wide-chart" height="400" width="100%"></canvas>
+                    @include('reports.dashboard-chart-period', ['chart' => 'category', 'currency' => 'грн'])
+                    <div class="dashboard-period-chart card-body p-0">
+                        <div class="dashboard-period-canvas">
+                            <canvas id="categories-chart" class="wide-chart" height="400" width="100%"></canvas>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer text-end d-print-none">
                     <a href="{{ route('categories.index') }}" class="btn btn-primary btn-sm">
@@ -76,8 +86,12 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <canvas id="expense-accounts-chart" class="wide-chart" height="400"
-                            width="100%"></canvas>
+                    @include('reports.dashboard-chart-period', ['chart' => 'expense', 'currency' => 'грн'])
+                    <div class="dashboard-period-chart card-body p-0">
+                        <div class="dashboard-period-canvas">
+                            <canvas id="expense-accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer text-end d-print-none">
                     <a href="{{ route('accounts.index', ['expense']) }}" class="btn btn-primary btn-sm"><span
@@ -93,8 +107,12 @@
 
                 </div>
                 <div class="card-body">
-                    <canvas id="revenue-accounts-chart" class="wide-chart" height="400"
-                            width="100%"></canvas>
+                    @include('reports.dashboard-chart-period', ['chart' => 'revenue', 'currency' => '€'])
+                    <div class="dashboard-period-chart card-body p-0">
+                        <div class="dashboard-period-canvas">
+                            <canvas id="revenue-accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer text-end d-print-none">
                     <a href="{{ route('accounts.index', ['revenue']) }}" class="btn btn-primary btn-sm"><span
@@ -182,6 +200,7 @@
 
 @endsection
 @section('scripts')
+    @include('reports.dashboard-chart-period-scripts')
     @vite(['js/pages/dashboard/dashboard.js'])
 
      <script nonce="{{ $JS_NONCE }}">
@@ -203,6 +222,6 @@
      <script src="v1/js/ff/charts.defaults.js?v={{ $FF_BUILD_TIME }}"
             nonce="{{ $JS_NONCE }}"></script>
      <script src="v1/js/ff/charts.js?v={{ substr(hash_file('sha256', public_path('v1/js/ff/charts.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}"></script>
-     <script src="v1/js/ff/index.js?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
+     <script src="{{ asset('v1/js/ff/index.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/index.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/index.js'), true)) }}" crossorigin="anonymous"></script>
 
 @endsection

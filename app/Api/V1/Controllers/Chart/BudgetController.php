@@ -115,7 +115,16 @@ final class BudgetController extends Controller
     public function overviewWithBudgetLimits(SameDateRangeRequest $request): JsonResponse
     {
         if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()) {
-            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::apiOverview($this->user, $request->attributes->get('start'), $request->attributes->get('end'), true));
+            [$start, $end] = \FireflyIII\Support\Reports\DashboardChartPeriods::requestRange(
+                $request->attributes->get('start'),
+                $request->attributes->get('end')
+            );
+            return response()->json(\FireflyIII\Support\Reports\BudgetProjection::apiOverview(
+                $this->user,
+                $start,
+                $end,
+                !\FireflyIII\Support\Reports\DashboardChartPeriods::isDashboardRequest()
+            ));
         }
 
         /** @var Carbon $start */

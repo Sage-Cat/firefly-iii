@@ -34,7 +34,7 @@ function drawChart() {
     if (billCount > 0) {
         multiCurrencyPieChart('chart/bill/frontpage', 'bills-chart');
     }
-    columnChart('chart/category/frontpage', 'categories-chart');
-    columnChart(accountExpenseUrl, 'expense-accounts-chart');
-    columnChart(accountRevenueUrl, 'revenue-accounts-chart');
+    columnChart(window.fireflyDashboardPeriods.url('category', 'chart/category/frontpage'), 'categories-chart');
+    columnChart(window.fireflyDashboardPeriods.url('expense', accountExpenseUrl), 'expense-accounts-chart');
+    columnChart(window.fireflyDashboardPeriods.url('revenue', accountRevenueUrl), 'revenue-accounts-chart');
 }

@@ -116,12 +116,15 @@ let index = function () {
                 this.anonymous = value;
                 drawMultiCurrencyChart(
                     "line",
-                    "api/v1/chart/account/overview?net_worth_eur=1&capital_period=" +
-                        encodeURIComponent(new URLSearchParams(window.location.search).get("capital_period") || "30d") +
-                        "&period=1D&start=" +
-                        formatDate(start, "yyyy-LL-dd") +
-                        "&end=" +
-                        formatDate(end, "yyyy-LL-dd"),
+                    window.fireflyDashboardPeriods.url(
+                        "capital",
+                        "api/v1/chart/account/overview?net_worth_eur=1&capital_period=" +
+                            encodeURIComponent(new URLSearchParams(window.location.search).get("capital_period") || "30d") +
+                            "&period=1D&start=" +
+                            formatDate(start, "yyyy-LL-dd") +
+                            "&end=" +
+                            formatDate(end, "yyyy-LL-dd"),
+                    ),
                     "accounts-chart",
                     value,
                     true,
@@ -130,10 +133,13 @@ let index = function () {
 
                 drawMultiCurrencyChart(
                     "stacked-column",
-                    "api/v1/chart/budget/overview-with-limits?start=" +
-                        formatDate(start, "yyyy-LL-dd") +
-                        "&end=" +
-                        formatDate(end, "yyyy-LL-dd"),
+                    window.fireflyDashboardPeriods.url(
+                        "budget",
+                        "api/v1/chart/budget/overview-with-limits?start=" +
+                            formatDate(start, "yyyy-LL-dd") +
+                            "&end=" +
+                            formatDate(end, "yyyy-LL-dd"),
+                    ),
                     "budgets-chart",
                     value,
                     false,
