@@ -25,6 +25,7 @@ import formatDate from "../util/format-date.js";
 import annotationPlugin from "chartjs-plugin-annotation";
 
 Chart.register(annotationPlugin);
+Chart.defaults.font.size = 13;
 
 let defaultChartOptions = {
     elements: {

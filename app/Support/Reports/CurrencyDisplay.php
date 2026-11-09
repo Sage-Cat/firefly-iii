@@ -6,9 +6,9 @@ namespace FireflyIII\Support\Reports;
 
 final class CurrencyDisplay
 {
-    private const SYMBOLS = ['UAH' => 'грн', 'EUR' => '€', 'USD' => '$', 'CHF' => '₣', 'USDT' => '₮'];
+    private const SYMBOLS = ['UAH' => '₴', 'EUR' => '€', 'USD' => '$', 'CHF' => '₣', 'USDT' => '₮'];
 
-    private const ALIASES = ['₴' => 'грн', 'грн' => 'грн', 'грн.' => 'грн', '€' => '€', '$' => '$', 'US$' => '$', '₣' => '₣', '₮' => '₮'];
+    private const ALIASES = ['₴' => '₴', 'грн' => '₴', 'грн.' => '₴', '€' => '€', '$' => '$', 'US$' => '$', '₣' => '₣', '₮' => '₮'];
 
     public static function normalize(string $symbol): string
     {

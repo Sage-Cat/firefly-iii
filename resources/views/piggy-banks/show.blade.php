@@ -177,8 +177,7 @@
 
      <script src="v1/js/lib/Chart.bundle.min.js?v={{ $FF_BUILD_TIME }}"
             nonce="{{ $JS_NONCE }}"></script>
-     <script src="v1/js/ff/charts.defaults.js?v={{ $FF_BUILD_TIME }}"
-            nonce="{{ $JS_NONCE }}"></script>
+     <script src="{{ asset('v1/js/ff/charts.defaults.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/charts.defaults.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/charts.defaults.js'), true)) }}" crossorigin="anonymous"></script>
      <script src="v1/js/ff/charts.js?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
      <script src="v1/js/ff/piggy-banks/show.js?v={{ $FF_BUILD_TIME }}"
             nonce="{{ $JS_NONCE }}"></script>

@@ -1,7 +1,7 @@
 (function (root) {
     'use strict';
 
-    const symbols = Object.freeze({UAH: 'грн', EUR: '€', USD: '$', CHF: '₣', USDT: '₮', '₴': 'грн', 'US$': '$', 'грн.': 'грн', 'грн': 'грн'});
+    const symbols = Object.freeze({UAH: '₴', EUR: '€', USD: '$', CHF: '₣', USDT: '₮', '₴': '₴', 'US$': '$', 'грн.': '₴', 'грн': '₴'});
 
     function locale() {
         const value = root.__localeId__ || root.document?.documentElement?.lang || root.navigator?.language || 'en-US';

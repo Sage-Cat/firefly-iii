@@ -23,7 +23,7 @@
         @else
             <div class="mb-3">
                 <div class="small text-muted">Разом на місяць</div>
-                <div class="fs-3 fw-semibold text-body-emphasis">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscriptionOverview['uah']) }} грн</div>
+                <div class="fs-3 fw-semibold text-body-emphasis">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscriptionOverview['uah']) }} ₴</div>
                 <div class="fs-5 text-body-secondary">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscriptionOverview['eur']) }} €</div>
             </div>
             @if(bccomp($subscriptionOverview['uah'], '0', 2) > 0)
@@ -36,7 +36,7 @@
                     <li class="d-flex gap-2 align-items-start py-2 border-bottom">
                         <span class="subscription-swatch subscription-color-{{ $subscription['color'] }}" aria-hidden="true"></span>
                         <a class="subscription-name flex-grow-1 text-body" href="{{ route('subscriptions.show', [$subscription['id']]) }}">{{ $subscription['name'] }}</a>
-                        <span class="text-nowrap fw-semibold">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscription['uah']) }} грн</span>
+                        <span class="text-nowrap fw-semibold">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscription['uah']) }} ₴</span>
                     </li>
                 @endforeach
             </ul>

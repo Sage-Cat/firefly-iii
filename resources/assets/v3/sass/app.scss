@@ -51,6 +51,11 @@ $primary: #1e6581; // original
 );
 @import "shepherd.js/dist/css/shepherd.css";
 
+// Scale the existing rem hierarchy with the browser's preferred base size.
+:root {
+    font-size: 106.25%;
+}
+
 // btn-outline-secondary
 html[data-bs-theme="dark"] .btn-outline-secondary {
     color: rgb(222, 226, 230);

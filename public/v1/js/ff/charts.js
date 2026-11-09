@@ -457,9 +457,8 @@ function ledgerBarChartOptions(options, data, container) {
     "use strict";
     var datasets = data.datasets;
     datasets.forEach(function (dataset) {
-        if ('revenue-accounts-chart' !== container
-            && ((dataset.currency_code && 'UAH' !== dataset.currency_code) || ['₴', 'грн'].indexOf(dataset.currency_symbol) === -1)) {
-            throw new Error('Category expenses require UAH data and currency metadata.');
+        if ((dataset.currency_code && 'UAH' !== dataset.currency_code) || ['₴', 'грн'].indexOf(dataset.currency_symbol) === -1) {
+            throw new Error('Ledger charts require UAH data and currency metadata.');
         }
         if (typeof dataset.currency_symbol !== 'string' || '' === dataset.currency_symbol) {
             throw new Error('Ledger charts require a dataset currency symbol.');

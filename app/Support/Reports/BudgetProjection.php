@@ -85,9 +85,9 @@ final class BudgetProjection
             }
             $current = $last->copy()->addSecond();
         }
-        $data = [['label' => $budget->name, 'type' => 'bar', 'entries' => $spent, 'currency_code' => 'UAH', 'currency_symbol' => 'грн']];
+        $data = [['label' => $budget->name, 'type' => 'bar', 'entries' => $spent, 'currency_code' => 'UAH', 'currency_symbol' => '₴']];
         if ($caps) {
-            $data[] = ['label' => trans('firefly.budgeted'), 'type' => 'bar', 'entries' => $budgeted, 'currency_code' => 'UAH', 'currency_symbol' => 'грн'];
+            $data[] = ['label' => trans('firefly.budgeted'), 'type' => 'bar', 'entries' => $budgeted, 'currency_code' => 'UAH', 'currency_symbol' => '₴'];
         }
 
         return $generator->multiSet($data);
@@ -275,7 +275,7 @@ final class BudgetProjection
             $start->addDay();
         }
         $data                                   = $generator->singleSet((string) trans('firefly.left'), $entries);
-        $data['datasets'][0]['currency_symbol'] = 'грн';
+        $data['datasets'][0]['currency_symbol'] = '₴';
         $data['datasets'][0]['currency_code']   = 'UAH';
 
         return $data;
@@ -325,7 +325,7 @@ final class BudgetProjection
             $current         = $last->copy()->addDay()->startOfDay();
         }
 
-        return $generator->multiSet([['label' => trans('firefly.spent'), 'entries' => $entries, 'currency_code' => 'UAH', 'currency_symbol' => 'грн']]);
+        return $generator->multiSet([['label' => trans('firefly.spent'), 'entries' => $entries, 'currency_code' => 'UAH', 'currency_symbol' => '₴']]);
     }
 
     public static function overview($user, Carbon $start, Carbon $end, $generator): array
@@ -333,9 +333,9 @@ final class BudgetProjection
         [$repository, $limitRepository] = self::repositories($user);
         $budgets = $repository->getActiveBudgets();
         $data    = [
-            ['label' => trans('firefly.spent_in_budget'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => 'грн'],
-            ['label' => trans('firefly.left_to_spend'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => 'грн'],
-            ['label' => trans('firefly.overspent'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => 'грн']
+            ['label' => trans('firefly.spent_in_budget'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => '₴'],
+            ['label' => trans('firefly.left_to_spend'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => '₴'],
+            ['label' => trans('firefly.overspent'), 'entries' => [], 'type' => 'bar', 'currency_code' => 'UAH', 'currency_symbol' => '₴']
         ];
         foreach ($budgets as $budget) {
             $limits     = $limitRepository->getBudgetLimits($budget, $start, $end);
@@ -368,7 +368,7 @@ final class BudgetProjection
                 continue;
             }
             $label                    = (string) ($row[$dimension] ?? trans('firefly.no_category'));
-            $result[$label]           ??= ['amount' => '0.00', 'currency_code' => 'UAH', 'currency_symbol' => 'грн'];
+            $result[$label]           ??= ['amount' => '0.00', 'currency_code' => 'UAH', 'currency_symbol' => '₴'];
             $result[$label]['amount'] = bcadd($result[$label]['amount'], $row['amount'], 2);
         }
 
@@ -460,12 +460,12 @@ final class BudgetProjection
             'currency_id'                     => (string) $currency->id,
             'currency_name'                   => $currency->name,
             'currency_code'                   => 'UAH',
-            'currency_symbol'                 => 'грн',
+            'currency_symbol'                 => '₴',
             'currency_decimal_places'         => 2,
             'primary_currency_id'             => (string) $currency->id,
             'primary_currency_name'           => $currency->name,
             'primary_currency_code'           => 'UAH',
-            'primary_currency_symbol'         => 'грн',
+            'primary_currency_symbol'         => '₴',
             'primary_currency_decimal_places' => 2,
             'period'                          => null,
             'date'                            => $first->toAtomString(),

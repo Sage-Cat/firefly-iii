@@ -20,6 +20,7 @@
     <script src="{{ asset('v1/js/ff/bills/index.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
     @if(!$subscriptionOverview['error'] && bccomp($subscriptionOverview['uah'], '0', 2) > 0)
         <script src="{{ asset('v1/js/lib/Chart.bundle.min.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
+        <script src="{{ asset('v1/js/ff/charts.defaults.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/charts.defaults.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/charts.defaults.js'), true)) }}" crossorigin="anonymous"></script>
         <script nonce="{{ $JS_NONCE }}">
             const subscriptionCosts = @json($subscriptionOverview['rows']);
             const subscriptionColors = ['#38bdf8', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#2dd4bf', '#f472b6', '#60a5fa'];

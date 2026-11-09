@@ -20,7 +20,7 @@
                     <p class="mb-3">Доходи, витрати та різниця за всіма особистими й ФОП-рахунками разом.</p>
                     <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
                         <div class="btn-group" role="group" aria-label="Валюта звіту">
-                            @foreach(['EUR' => '€', 'UAH' => 'грн'] as $code => $label)
+                            @foreach(['EUR' => '€', 'UAH' => '₴'] as $code => $label)
                                 <a class="btn btn-sm {{ $currency === $code ? 'btn-primary' : 'btn-outline-secondary' }}"
                                    href="{{ route('reports.profit', ['currency' => $code, 'months' => $months, 'start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')]) }}">{{ $label }}</a>
                             @endforeach
@@ -127,6 +127,7 @@
     @vite(['js/pages/generic.js'])
     @if($summary)
         <script src="{{ asset('v1/js/lib/Chart.bundle.min.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
+        <script src="{{ asset('v1/js/ff/charts.defaults.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/charts.defaults.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/charts.defaults.js'), true)) }}" crossorigin="anonymous"></script>
         <script nonce="{{ $JS_NONCE }}">
             const profitPoints = @json($summary['points']);
             const profitCurrency = @json($currency);

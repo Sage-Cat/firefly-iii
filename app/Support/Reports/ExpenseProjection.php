@@ -151,7 +151,7 @@ final class ExpenseProjection
         $series   = [];
         foreach (['Withdrawal' => ['spent', 'rgba(219, 68, 55, 0.5)'], 'Deposit' => ['earned', 'rgba(0, 141, 76, 0.5)']] as $type => [$label, $colour]) {
             $series[$type] = [
-                'label'           => trans('firefly.' . $label) . ' (грн)',
+                'label'           => trans('firefly.' . $label) . ' (₴)',
                 'entries'         => $entries,
                 'type'            => 'bar',
                 'backgroundColor' => $colour,
@@ -539,10 +539,10 @@ final class ExpenseProjection
             $seen[$id]      = true;
             $name           = trim((string) ($journal['source_account_name'] ?? ''));
             $name           = '' === $name ? 'Інше' : $name;
-            $entries[$name] = bcadd($entries[$name] ?? '0.00', self::amount($journal, 'EUR', true)['amount'], 2);
+            $entries[$name] = bcadd($entries[$name] ?? '0.00', self::amount($journal, 'UAH', true)['amount'], 2);
         }
         uasort($entries, static fn(string $left, string $right): int => bccomp($right, $left, 2));
-        $currency = ReportingCurrency::currency('EUR');
+        $currency = ReportingCurrency::currency('UAH');
 
         return [[
             'label'                   => trans('firefly.earned'),
