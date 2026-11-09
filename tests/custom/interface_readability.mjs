@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const bootstrap = fs.readFileSync(process.argv[2] || path.join(root, 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js'), 'utf8');
 const manifest = JSON.parse(read('public/build/manifest.json'));
 let assets = 0;
 for (const entry of Object.values(manifest)) {
@@ -84,6 +85,7 @@ const profit = `<div class="card card-body"><h2>Доходи, витрати т�
 const subscriptions = '<aside id="subscription-overview" class="card"><div class="card-header"><h2 class="card-title">Витрати на підписки</h2></div><div class="card-body"><p class="small">Середня місячна вартість активних підписок.</p><div class="fs-3">12 345,67 ₴</div><ul class="list-unstyled"><li class="d-flex gap-2 align-items-start py-2 border-bottom"><span class="subscription-swatch"></span><a class="subscription-name flex-grow-1">Хмарне сховище та інструменти для роботи</a><span class="text-nowrap fw-semibold">1 234,56 ₴</span></li></ul></div></aside>';
 const review = '<div id="payment-review"><article class="payment-card card"><div class="payment-card-header"><div><div class="payment-meta">09.11.2026 · Особистий рахунок</div><h2 class="payment-card-title payment-description">Оплата робочих інструментів і послуг</h2></div><div class="payment-amount-block"><span class="payment-amount-label">Сума</span><strong class="payment-amount">1 234,56 ₴</strong></div></div><div class="payment-card-body"><div class="payment-category-layout"><div class="payment-choice"><label class="payment-section-title">Категорія</label><div class="payment-select-row"><select class="form-select"><option>Робочі інструменти</option></select><button class="btn btn-primary">Зберегти</button></div></div><div><p class="payment-hint">Рекомендовані категорії</p><button class="payment-recommendation btn"><span class="payment-recommendation-name">Підписки та сервіси</span></button></div></div></div></article></div>';
 assert.match(native.budget, /class="card-body p-0 table-responsive">\s*<table[^>]*id="budgetList"/, 'The native budget table scrolls inside its card when enlarged text needs more width');
+assert.equal((native.budget.match(/data-bs-config='\{"popperConfig":\{"strategy":"fixed"\}\}'/g) || []).length, 3, 'Every native budget action and limit dropdown uses viewport positioning');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'interface-readability-'));
 const safeScript = text => text.replace(/<\/script/gi, '<\\/script');
 try {
@@ -124,7 +126,26 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
         assert.deepEqual(result.order, chartNames);
         assert.ok(result.canvas.every((canvas, index) => Math.abs(canvas.height - (result.width <= 767 ? 280 : index === 0 ? 360 : 400)) <= 1 && canvas.width > 0 && canvas.width <= result.width), 'Existing desktop/mobile chart height constraints are preserved: ' + JSON.stringify(result.canvas));
     }
-    console.log(`Passed native Sass/chart typography, ${legacyViews} legacy consumers and ${native.assets} JS integrity/import checks; real Chrome baseline/desktop/tablet/mobile layouts preserve hierarchy, chart fonts, card order and overflow constraints.`);
+    for (const width of [390, 1440]) {
+        for (const count of [1, 6]) {
+            for (const kind of ['actions', 'limit-new', 'limit-existing']) {
+                const rows = Array.from({length: count}, (_, index) => `<tr><td style="min-width:540px">Бюджет ${index + 1}</td><td style="min-width:200px"><div class="dropdown"><button id="menu-${index}" type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-config='{"popperConfig":{"strategy":"fixed"}}'>${kind === 'actions' ? 'Дії' : 'Ліміт'}</button><ul class="dropdown-menu ${kind === 'actions' ? '' : 'dropdown-menu-end'}"><li><a class="dropdown-item" href="#">Переглянути</a></li><li><a class="dropdown-item" href="#">Редагувати</a></li><li><a class="dropdown-item" href="#">Останній пункт</a></li></ul></div></td></tr>`).join('');
+                const check = `window.errors=[];window.addEventListener('error',event=>window.errors.push(event.message));(async()=>{const box=document.getElementById('scroll'),button=document.getElementById('menu-${count - 1}');button.scrollIntoView({block:'center',inline:'nearest'});const menu=button.nextElementSibling,dropdown=new bootstrap.Dropdown(button);dropdown.show();await new Promise(r=>setTimeout(r,150));const visible=()=>{const item=menu.querySelector('li:last-child a'),r=item.getBoundingClientRect();return item.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))};const before=visible();if(innerWidth<768)box.scrollLeft-=20;await new Promise(r=>setTimeout(r,150));document.body.setAttribute('data-check',JSON.stringify({width:innerWidth,page:document.documentElement.scrollWidth,position:menu.style.position,visibleBefore:before,visibleAfter:visible(),scroll:box.scrollLeft,errors:window.errors}));})();`;
+                const html = '<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + native.css + '</style>' + typography + '<body style="margin:16px"><section class="card"><div id="scroll" class="card-body p-0 table-responsive"><table class="table mb-0"><tbody>' + rows + '</tbody></table></div></section><script>' + safeScript(bootstrap) + '</script><script>' + check + '</script></body></html>';
+                const fixture = path.join(temporary, `menu-${width}-${count}-${kind}.html`);
+                fs.writeFileSync(fixture, html);
+                const output = fixture + '-viewport';
+                execFileSync(process.execPath, [fileURLToPath(new URL('./browser_viewport.cjs', import.meta.url)), fixture, String(width), output], {stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000});
+                const dom = fs.readFileSync(output + '.html', 'utf8');
+                const result = JSON.parse(dom.match(/data-check="([^"]+)"/)[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
+                assert.equal(result.width, width);
+                assert.deepEqual(result.errors, []);
+                assert.ok(result.page <= width + 1 && result.position === 'fixed' && result.visibleBefore && result.visibleAfter, 'Every budget menu item remains visible and clickable outside the scroll clip: ' + JSON.stringify(result));
+                if (width === 390) assert.ok(result.scroll > 0, 'The menu must remain accessible after horizontal table scrolling');
+            }
+        }
+    }
+    console.log(`Passed native Sass/chart typography, ${legacyViews} legacy consumers and ${native.assets} JS integrity/import checks; real Chrome baseline/desktop/tablet/mobile layouts preserve hierarchy, chart fonts, card order and overflow constraints; 12 Bootstrap budget-menu cases remain accessible after scrolling.`);
 } finally {
     fs.rmSync(temporary, {recursive: true, force: true});
 }
