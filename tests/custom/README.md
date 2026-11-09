@@ -244,3 +244,8 @@ Category colors follow normalized names rather than their rank or selected
 period. Related semantic groups share a hue family with distinct deterministic
 shades; unknown names use a stable hash fallback. Normalization affects only
 color selection, preserving the original labels, amounts and complete data.
+
+Category fills and borders stay within the orange/yellow and blue/violet hue
+bands, reserving red and green for account charts. The native test covers all
+semantic families and 1,000 unrecognized names without changing ranking,
+amounts or the account palettes.

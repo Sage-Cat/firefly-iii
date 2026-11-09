@@ -33,7 +33,7 @@ This fork adds a Ukrainian finance reporting profile while retaining the upstrea
 - Shared display symbols for UAH (`₴`), EUR (`€`), USD (`$`), CHF (`₣`) and USDT (`₮`), including native and legacy amount formatters.
 - Four responsive dashboard summary tiles, with exact-zero cash-flow details omitted and all flow subtitles hidden in anonymous mode.
 - Independent 30-day, three-month and one-year selectors for all five homepage charts, using server dates in Europe/Kyiv and preserving other chart choices.
-- Paired homepage charts: top three expense accounts in pastel red and top three revenue accounts in pastel green; categories show the top seven with stable category colors.
+- Paired homepage charts: top three expense accounts in pastel red and top three revenue accounts in pastel green; categories show the top seven with stable colors that exclude red and green.
 - Slightly larger interface and chart typography.
 - A compact, accessible payment-review page with the existing explicit category and transfer decisions preserved.
 - A single expense-chart tax bar for payees whose selected-period charges and linked refunds use only the exact confirmed tax categories; mixed and unknown payees remain separate.
