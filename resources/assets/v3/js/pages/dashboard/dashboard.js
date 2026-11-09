@@ -114,7 +114,6 @@ let index = function () {
                 let start = new Date(window.store.get("start"));
                 let end = new Date(window.store.get("end"));
                 this.anonymous = value;
-                this.loadPiggyBanks();
                 drawMultiCurrencyChart(
                     "line",
                     "api/v1/chart/account/overview?net_worth_eur=1&capital_period=" +
