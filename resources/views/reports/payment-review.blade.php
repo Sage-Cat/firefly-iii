@@ -23,7 +23,7 @@
                 <p class="mb-2">Ці платежі вже внесені в облік. Обери категорію або уточни другий рахунок власного переказу.</p>
                 <p class="text-muted small mb-3">Рекомендації — підказки, вони не застосовуються автоматично. Платежі без категорії не зупиняють імпорт.</p>
                 <div class="d-flex flex-wrap gap-2" aria-label="Тип уточнення">
-                    @foreach(['all' => 'Усі', 'category' => 'Без категорії', 'transfer' => 'Власні перекази'] as $key => $label)
+                    @foreach(['all' => 'Усі', 'category' => 'Уточнення категорії', 'transfer' => 'Власні перекази'] as $key => $label)
                         <a class="btn btn-sm {{ $filter === $key ? 'btn-primary' : 'btn-outline-secondary' }}" href="{{ route('transactions.review', ['filter' => $key]) }}">{{ $label }} <span class="badge text-bg-secondary ms-1">{{ $counts[$key] }}</span></a>
                     @endforeach
                 </div>
@@ -82,7 +82,7 @@
                         <h3 class="fs-6">Якщо це {{ $payment['incoming'] ? 'дохід від іншої особи' : 'витрата іншій особі' }}</h3>
                         @endif
                     @else
-                        <span class="badge text-bg-secondary mb-3">Без категорії</span>
+                        <span class="badge text-bg-secondary mb-3">{{ $payment['category_pending'] ? 'Інше · потребує уточнення' : 'Без категорії' }}</span>
                     @endif
                     @if(!$payment['pending'] || $payment['review']['status'] === 'pending')
                     @if(count($payment['recommendations']) > 0)

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Reports;
 
 use FireflyIII\Models\Category;
+use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -14,7 +15,9 @@ use RuntimeException;
 
 final class PaymentReview
 {
-    public const LEGACY_CATEGORY = 'Потребує уточнення';
+    public const LEGACY_CATEGORY  = 'Потребує уточнення';
+    public const DEFAULT_CATEGORY = 'Інше';
+    public const DEFAULT_MARKER   = 'Потребує уточнення категорії';
 
     public static function accounts($user): array
     {
@@ -114,14 +117,16 @@ final class PaymentReview
         $categories = self::categories($user);
         $candidates = self::query($user)
             ->where(static function ($query): void {
-                $query->where(static fn($ordinary) => $ordinary->whereHas('transactionType', static fn($type) => $type->whereIn('type', [
-                    'Withdrawal',
-                    'Deposit'
-                ]))->whereDoesntHave('categories', static fn($category) => $category->where(
-                    'name',
-                    '!=',
-                    self::LEGACY_CATEGORY
-                )))->orWhereHas('notes', static fn($note) => $note->where('text', 'like', '%"bank_review"%'));
+                $query
+                    ->where(static fn($ordinary) => $ordinary->whereHas('transactionType', static fn($type) => $type->whereIn('type', [
+                        'Withdrawal',
+                        'Deposit'
+                    ]))->whereDoesntHave('categories', static fn($category) => $category->where('name', '!=', self::LEGACY_CATEGORY)))
+                    ->orWhere(static fn($fallback) => $fallback->whereHas('categories', static fn($category) => $category->where(
+                        'name',
+                        self::DEFAULT_CATEGORY
+                    ))->whereHas('tags', static fn($tag) => $tag->where('tag', self::DEFAULT_MARKER)))
+                    ->orWhereHas('notes', static fn($note) => $note->where('text', 'like', '%"bank_review"%'));
             })
             ->orderByDesc('date')
             ->orderByDesc('id')
@@ -268,10 +273,15 @@ final class PaymentReview
                 $reviewNoteId = (string) $note->id;
             }
         }
-        $pending        = null !== $review && in_array($review['status'], ['pending', 'decided'], true);
-        $type           = $journal->transactionType->type;
+        $pending     = null !== $review && in_array($review['status'], ['pending', 'decided'], true);
+        $type        = $journal->transactionType->type;
+        $provisional = $journal->categories->count() === 1
+        && self::DEFAULT_CATEGORY === $journal->categories->first()->name
+        && $journal->tags->contains(
+            static fn($tag): bool => self::DEFAULT_MARKER === $tag->tag && (string) $tag->user_group_id === (string) $journal->user_group_id
+        );
         $realCategories = $journal->categories->filter(static fn($category): bool => self::LEGACY_CATEGORY !== $category->name);
-        $eligible       = $pending || in_array($type, ['Withdrawal', 'Deposit'], true) && $realCategories->isEmpty();
+        $eligible       = $pending || in_array($type, ['Withdrawal', 'Deposit'], true) && ($realCategories->isEmpty() || $provisional);
         $leg            = $journal->transactions->first(static fn($leg): bool => $pending
             ? (string) $leg->account_id === (string) $review['account_id']
             : isset($accounts[(string) $leg->account_id])
@@ -304,36 +314,42 @@ final class PaymentReview
         $state  = self::state($journal);
 
         return [
-            'id'             => (string) $journal->id,
-            'group_id'       => (string) $journal->transaction_group_id,
-            'eligible'       => null !== $reviewError || $eligible && null !== $leg,
-            'pending'        => $pending,
-            'review'         => $review,
-            'review_note_id' => $reviewNoteId,
-            'blocked'        => null !== $reviewError,
-            'review_error'   => $reviewError,
-            'fingerprint'    => self::fingerprint($state),
-            'description'    => $journal->description,
-            'date'           => $journal->date->copy()->setTimezone('Europe/Kyiv')->format('d.m.Y H:i'),
-            'type'           => $pending ? ('in' === $review['direction'] ? 'Deposit' : 'Withdrawal') : $type,
-            'currency'       => $journal->transactionCurrency->code,
-            'amount'         => $amount,
-            'incoming'       => !str_starts_with($value, '-'),
-            'account'        => null === $leg ? 'Рахунок не визначено' : $accounts[(string) $leg->account_id]['name'] ?? 'Рахунок недоступний',
-            'merchant'       => $pending ? '' : $other?->account?->name ?? '',
-            'mcc'            => $mcc,
-            'category_id'    => $realCategories->first()?->id
+            'id'               => (string) $journal->id,
+            'group_id'         => (string) $journal->transaction_group_id,
+            'eligible'         => null !== $reviewError || $eligible && null !== $leg,
+            'pending'          => $pending,
+            'category_pending' => $provisional,
+            'review'           => $review,
+            'review_note_id'   => $reviewNoteId,
+            'blocked'          => null !== $reviewError,
+            'review_error'     => $reviewError,
+            'fingerprint'      => self::fingerprint($state),
+            'description'      => $journal->description,
+            'date'             => $journal->date->copy()->setTimezone('Europe/Kyiv')->format('d.m.Y H:i'),
+            'type'             => $pending ? ('in' === $review['direction'] ? 'Deposit' : 'Withdrawal') : $type,
+            'currency'         => $journal->transactionCurrency->code,
+            'amount'           => $amount,
+            'incoming'         => !str_starts_with($value, '-'),
+            'account'          => null === $leg ? 'Рахунок не визначено' : $accounts[(string) $leg->account_id]['name'] ?? 'Рахунок недоступний',
+            'merchant'         => $pending ? '' : $other?->account?->name ?? '',
+            'mcc'              => $mcc,
+            'category_id'      => $provisional ? null : $realCategories->first()?->id
         ];
     }
 
     public static function save($user, int $journalId, array $input): bool
     {
         return DB::transaction(static function () use ($user, $journalId, $input): bool {
-            $journal = self::query($user)->where('id', $journalId)->lockForUpdate()->firstOrFail();
+            $groupId = TransactionJournal::query()->where('id', $journalId)->where('user_group_id', $user->user_group_id)->value('transaction_group_id');
+            $group   = TransactionGroup::query()->where('id', $groupId)->where('user_group_id', $user->user_group_id)->lockForUpdate()->firstOrFail();
+            $journal = self::query($user)->where('id', $journalId)->where('transaction_group_id', $group->id)->lockForUpdate()->firstOrFail();
+            $journal->setRelation('transactionGroup', $group);
             $journal->setRelation('transactions', $journal->transactions()->with('account')->lockForUpdate()->get());
             $journal->setRelation('notes', $journal->notes()->lockForUpdate()->get());
             DB::table('category_transaction_journal')->where('transaction_journal_id', $journalId)->lockForUpdate()->get();
+            DB::table('tag_transaction_journal')->where('transaction_journal_id', $journalId)->lockForUpdate()->get();
             $journal->load('categories');
+            $journal->setRelation('tags', $journal->tags()->lockForUpdate()->get());
             self::assertFingerprint(self::state($journal), (string) $input['fingerprint']);
             $accounts = self::accounts($user);
             $row      = self::row($journal, $accounts);
@@ -350,6 +366,11 @@ final class PaymentReview
                     throw new InvalidArgumentException('Обери категорію цього платежу.');
                 }
                 $journal->categories()->sync([(int) $categoryId]);
+                $markerIds = $journal->tags->filter(
+                    static fn($tag): bool => self::DEFAULT_MARKER === $tag->tag && (string) $tag->user_group_id === (string) $user->user_group_id
+                )
+                    ->modelKeys();
+                $journal->tags()->detach($markerIds);
 
                 return false;
             }
@@ -376,6 +397,7 @@ final class PaymentReview
         return [
             'id'          => (string) $journal->id,
             'group'       => (string) $journal->transaction_group_id,
+            'group_owner' => (string) $journal->transactionGroup->user_group_id,
             'owner'       => (string) $journal->user_group_id,
             'type'        => $journal->transactionType->type,
             'date'        => $journal->date->toIso8601String(),
@@ -384,6 +406,13 @@ final class PaymentReview
             'categories'  => $journal->categories->sortBy('id')
                 ->pluck('id')
                 ->map(static fn($id): string => (string) $id)
+                ->values()
+                ->all(),
+            'tags'        => $journal->tags->sortBy('id')
+                ->map(static fn($tag): array => [
+                    'id'  => (string) $tag->id,
+                    'tag' => $tag->tag
+                ])
                 ->values()
                 ->all(),
             'notes'       => $journal->notes->sortBy('id')
@@ -413,6 +442,15 @@ final class PaymentReview
         return TransactionJournal::query()
             ->where('user_group_id', $user->user_group_id)
             ->whereHas('transactionGroup', static fn($query) => $query->where('user_group_id', $user->user_group_id))
-            ->with(['categories', 'notes', 'transactionType', 'transactionCurrency', 'transactions.account', 'transactionJournalMeta']);
+            ->with([
+                'categories',
+                'tags',
+                'notes',
+                'transactionGroup',
+                'transactionType',
+                'transactionCurrency',
+                'transactions.account',
+                'transactionJournalMeta'
+            ]);
     }
 }

@@ -814,6 +814,9 @@ def run(command, cached=False, state_dir=STATE, from_date=None):
     if config.get("auto_classification"):
         from bank_classification import synchronize as synchronize_classification
         result["classification"] = synchronize_classification(firefly, state_dir.parent / "bank-classification")
+    if config.get("auto_category_fallback"):
+        from category_fallback import synchronize as synchronize_fallback
+        result["category_fallback"] = synchronize_fallback(firefly, state_dir.parent / "category-fallback")
     save_json(state_dir / "last-success.json", result)
     return result
 

@@ -12,6 +12,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from monobank_sync import Deferred, KYIV, save_json
+from category_fallback import pending_default, MARKER
+from firefly_api import payment_fingerprint
 
 CATEGORY = "Повернення коштів"
 LEGACY_CATEGORY = "Потребує уточнення"
@@ -138,7 +140,7 @@ def plan_refunds(groups, accounts, categories, link_types, links):
             continue
         all_cancellations[identifier] = dict(record, vendor=vendor)
         category = journal.get("category_name")
-        if (category not in (None, "", LEGACY_CATEGORY, CATEGORY)
+        if ((category not in (None, "", LEGACY_CATEGORY, CATEGORY) and not pending_default(journal))
                 or (category in (None, "") and journal.get("category_id"))):
             manual += 1
             continue
@@ -227,14 +229,18 @@ def synchronize(client, state_dir, dry_run=False):
             client.request("PUT", f"/transactions/{update['group_id']}", {
                 "apply_rules": False, "fire_webhooks": False,
                 "transactions": [{"transaction_journal_id": identifier, "category_id": plan["category_id"]}]},
-                category_match=str(current["category_id"]) if current.get("category_id") else "none")
+                category_match=str(current["category_id"]) if current.get("category_id") else "none",
+                payment_hash=payment_fingerprint(update['group_id'], current))
         except RuntimeError as error:
             if "HTTP 409:" not in str(error):
                 raise
             result["stale_skipped"] += 1
             continue
         actual = _group_journal(client, update["group_id"], identifier)
-        if (_fingerprint(actual, PRESERVED_FIELDS) != _fingerprint(old, PRESERVED_FIELDS)
+        expected = copy.deepcopy(old)
+        if pending_default(old):
+            expected["tags"] = [tag for tag in (old.get("tags") or []) if tag != MARKER]
+        if (_fingerprint(actual, PRESERVED_FIELDS) != _fingerprint(expected, PRESERVED_FIELDS)
                 or str(actual.get("category_id")) != plan["category_id"]):
             raise Deferred("Refund classification changed preserved data or failed read-back")
         result["classified"] += 1

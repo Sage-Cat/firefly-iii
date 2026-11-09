@@ -27,12 +27,14 @@ final class PaymentTagsUpdate
     {
         $expected = $request->header('If-Match-Tags');
         $category = $request->header('If-Match-Category');
+        $payment  = $request->header('If-Match-Payment');
         $data     = $request->all();
         $rows     = $data['transactions'] ?? null;
         if (
             !is_string($expected)
             || !preg_match('/^[a-f0-9]{64}$/D', $expected)
             || null !== $category && (!is_string($category) || !preg_match('/^(?:none|[1-9][0-9]*)$/D', $category))
+            || null !== $payment && (!is_string($payment) || !preg_match('/^[0-9a-f]{64}$/D', $payment))
             || [] !== array_diff(array_keys($data), ['transactions', 'apply_rules', 'fire_webhooks'])
             || ($data['apply_rules'] ?? null) !== false
             || ($data['fire_webhooks'] ?? null) !== false
@@ -61,7 +63,7 @@ final class PaymentTagsUpdate
         if (null === $user || (string) $group->user_group_id !== (string) $user->user_group_id) {
             return response()->json(['message' => 'Transaction not found.'], 404);
         }
-        $response = DB::transaction(static function () use ($group, $rows, $expected, $category, $requested, $user): JsonResponse {
+        $response = DB::transaction(static function () use ($group, $rows, $expected, $category, $payment, $requested, $user): JsonResponse {
             $ownedGroup = TransactionGroup::query()->where('id', $group->id)->where('user_group_id', $user->user_group_id)->lockForUpdate()->first();
             if (null === $ownedGroup) {
                 return response()->json(['message' => 'Transaction not found.'], 404);
@@ -74,6 +76,16 @@ final class PaymentTagsUpdate
                 ->first();
             if (null === $journal) {
                 return response()->json(['message' => 'Transaction journal not found.'], 404);
+            }
+            if (null !== $payment) {
+                try {
+                    PaymentMetadataState::lock($journal);
+                    if (!hash_equals($payment, PaymentMetadataState::fingerprint($journal))) {
+                        return response()->json(['message' => 'Payment changed since it was read.'], 409);
+                    }
+                } catch (\RuntimeException $exception) {
+                    return response()->json(['message' => $exception->getMessage()], 409);
+                }
             }
             if (null !== $category) {
                 $categories = DB::table('category_transaction_journal')

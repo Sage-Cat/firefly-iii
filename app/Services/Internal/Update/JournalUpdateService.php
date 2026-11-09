@@ -197,6 +197,8 @@ class JournalUpdateService
         $this->updateForeignAmount();
         $this->updateLocation();
 
+        \FireflyIII\Support\Reports\PaymentCategoryFinalization::journal($this->transactionJournal, $this->data, $this->transactionGroup->user);
+
         Preferences::mark();
 
         $this->transactionJournal->refresh();

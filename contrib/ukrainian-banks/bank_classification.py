@@ -17,6 +17,8 @@ from pathlib import Path
 from bank_refunds import date_of, indexed_journals, positive_amount, settled
 from bank_review import is_suspense, note_object
 from monobank_sync import Deferred, OWN_TRANSFER_HINTS, read_json, save_json
+from category_fallback import pending_default, MARKER
+from firefly_api import payment_fingerprint
 
 PROVIDERS = {"monobank", "privat-personal", "privat-fop"}
 LEGACY_CATEGORY = "Потребує уточнення"
@@ -27,6 +29,7 @@ FINANCIAL_FIELDS = (
 )
 PRESERVED_FIELDS = FINANCIAL_FIELDS + (
     "description", "notes", "hold", "source_name", "destination_name", "external_id", "internal_reference",
+    "original_source", "import_hash_v2",
     "budget_id", "budget_name", "bill_id", "bill_name",
 )
 
@@ -134,7 +137,7 @@ def _category_conflict(journal, target, categories):
     category_id, name = journal.get("category_id"), journal.get("category_name")
     if name == target and category_id and str(category_id) == _named(categories, target, "name"):
         return False
-    return not ((not category_id and not name) or (category_id and name == LEGACY_CATEGORY))
+    return not ((not category_id and not name) or (category_id and name == LEGACY_CATEGORY) or pending_default(journal))
 
 
 def plan(config, groups, accounts, categories, tags, link_types=(), links=()):
@@ -157,7 +160,7 @@ def plan(config, groups, accounts, categories, tags, link_types=(), links=()):
         if _category_conflict(journal, target["category"], categories):
             conflicts += 1
             continue
-        category_change = str(journal.get("category_id")) != category_id
+        category_change = str(journal.get("category_id")) != category_id or pending_default(journal)
         missing_tags = [tag for tag in target["tags"] if tag not in (journal.get("tags") or [])]
         if category_change or missing_tags:
             updates.append({"journal_id": identifier, "group_id": record["group_id"], **target,
@@ -244,7 +247,8 @@ def synchronize(client, state_dir, dry_run=False):
             current = fresh
             try:
                 _put(client, update, {"category_id": category_id},
-                     category_match=str(current["category_id"]) if current.get("category_id") else "none")
+                     category_match=str(current["category_id"]) if current.get("category_id") else "none",
+                     payment_hash=payment_fingerprint(update['group_id'], current))
             except RuntimeError as error:
                 if "HTTP 409:" not in str(error):
                     raise
@@ -252,7 +256,9 @@ def synchronize(client, state_dir, dry_run=False):
                 result["stale_skipped"] += 1
                 continue
             actual = _journal(client, update["group_id"], identifier)
-            if (_fingerprint(actual, PRESERVED_FIELDS + ("tags",)) != _fingerprint(current, PRESERVED_FIELDS + ("tags",))
+            expected_tags = [tag for tag in (current.get("tags") or []) if not (pending_default(current) and tag == MARKER)]
+            if (_fingerprint(actual, PRESERVED_FIELDS) != _fingerprint(current, PRESERVED_FIELDS)
+                    or sorted(actual.get("tags") or []) != sorted(expected_tags)
                     or str(actual.get("category_id")) != category_id or actual.get("category_name") != update["category"]):
                 raise Deferred("Category update changed preserved data or failed read-back")
             current = actual
@@ -278,7 +284,8 @@ def synchronize(client, state_dir, dry_run=False):
                 from firefly_api import tag_fingerprint
                 try:
                     _put(client, update, {"tags": merged}, tags_hash=tag_fingerprint(fresh.get("tags") or []),
-                         category_match=str(fresh["category_id"]) if fresh.get("category_id") else "none")
+                         category_match=str(fresh["category_id"]) if fresh.get("category_id") else "none",
+                         payment_hash=payment_fingerprint(update['group_id'], fresh))
                 except RuntimeError as error:
                     if "HTTP 409:" not in str(error):
                         raise

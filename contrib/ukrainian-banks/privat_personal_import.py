@@ -307,7 +307,8 @@ def build_plan(config, accounts, groups, frozen=None, source_data=None):
             raise Deferred("Projected closing balance does not reconcile")
     return {"openings": openings, "operations": ops, "targets": {a: amount(v) for a, v in targets.items()},
             "preserved_peers": peers, "coverage": coverage, "source_rows": len(rows),
-            "internal_cards": internal_cards, "auto_classification": bool(config.get("auto_classification"))}
+            "internal_cards": internal_cards, "auto_classification": bool(config.get("auto_classification")),
+            "auto_category_fallback": bool(config.get("auto_category_fallback"))}
 
 
 def apply_plan(client, plan):
@@ -338,6 +339,9 @@ def apply_plan(client, plan):
     if plan.get("auto_classification"):
         from bank_classification import synchronize
         synchronize(client, Path(__file__).parent / ".state/bank-classification")
+    if plan.get("auto_category_fallback"):
+        from category_fallback import synchronize as synchronize_fallback
+        synchronize_fallback(client, Path(__file__).parent / ".state/category-fallback")
     return dict(counts)
 
 

@@ -18,6 +18,42 @@ def tag_fingerprint(tags):
     return hashlib.sha256(json.dumps(sorted(tags), ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
+def payment_fingerprint(group_id, journal):
+    """Guard caller-visible owner metadata and financial scope before classification."""
+    def identifier(value, optional=False):
+        if optional and value in (None, ""):
+            return ""
+        value = str(value)
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            raise ValueError("Invalid payment identity")
+        return value
+    def amount(value, optional=False):
+        if optional and value in (None, ""):
+            return ""
+        with localcontext() as context:
+            context.prec = 80
+            number = abs(Decimal(str(value)))
+            fixed = number.quantize(Decimal("0.0000000000000001"))
+            if not number.is_finite() or number != fixed or (not optional and not number):
+                raise ValueError("Invalid payment amount")
+            return format(fixed, ".16f") if number else ""
+    date = datetime.fromisoformat(journal["date"])
+    if date.tzinfo is None or date.microsecond:
+        raise ValueError("Payment date requires whole seconds and timezone")
+    tags = journal.get("tags") or []
+    tag_fingerprint(tags)
+    fields = [journal.get(key) or "" for key in ("source_name", "destination_name", "description", "notes")]
+    if not all(isinstance(value, str) for value in fields):
+        raise ValueError("Invalid payment text")
+    state = ["payment-metadata-v1", identifier(group_id), identifier(journal["transaction_journal_id"]),
+             journal["type"].lower(), str(int(date.timestamp())), amount(journal["amount"]), identifier(journal["currency_id"]),
+             identifier(journal["source_id"]), identifier(journal["destination_id"]), *fields, sorted(tags)]
+    state.extend(identifier(journal.get(key), True) for key in ("category_id", "budget_id", "bill_id", "foreign_currency_id"))
+    state.append(amount(journal.get("foreign_amount"), True))
+    state.extend(journal.get(key) or "" for key in ("external_id", "internal_reference", "original_source", "import_hash_v2"))
+    return hashlib.sha256(json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
 def internal_card_fingerprint(group_id, journal):
     """Hash an API journal for the narrow conditional staging DELETE contract."""
     def identifier(value):
@@ -127,7 +163,7 @@ class Client:
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None,
-                 internal_card_hash=None, tags_hash=None, bank_authorization_hash=None):
+                 internal_card_hash=None, tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -143,6 +179,19 @@ class Client:
             if not re.fullmatch(r"(?:none|[1-9][0-9]*)", category_match):
                 raise ValueError("Invalid expected transaction category")
             headers["If-Match-Category"] = category_match
+        if type(category_default) is not bool or (category_default and (
+                method != "PUT" or not re.fullmatch(r"/transactions/[1-9][0-9]*", path)
+                or category_match is None or any(value is not None for value in (
+                    notes_hash, internal_card_hash, tags_hash, bank_authorization_hash)))):
+            raise ValueError("Invalid default category update precondition")
+        if category_default:
+            headers["If-Category-Default"] = "1"
+        if payment_hash is not None:
+            if (not isinstance(payment_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", payment_hash)
+                    or method != "PUT" or not re.fullmatch(r"/transactions/[1-9][0-9]*", path)
+                    or category_match is None or bank_authorization_hash is not None or internal_card_hash is not None):
+                raise ValueError("Invalid payment metadata precondition")
+            headers["If-Match-Payment"] = payment_hash
         if internal_card_hash is not None:
             if (not isinstance(internal_card_hash, str)
                     or not re.fullmatch(r"[0-9a-f]{64}", internal_card_hash)
@@ -174,11 +223,11 @@ class Client:
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
     def request(self, method, path, data=None, *, notes_hash=None, category_match=None, internal_card_hash=None,
-                tags_hash=None, bank_authorization_hash=None):
+                tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
         result = self._request(method, path, body, "application/json", notes_hash=notes_hash,
                                category_match=category_match, internal_card_hash=internal_card_hash, tags_hash=tags_hash,
-                               bank_authorization_hash=bank_authorization_hash)
+                               bank_authorization_hash=bank_authorization_hash, category_default=category_default, payment_hash=payment_hash)
         return json.loads(result) if result else None
 
     def all(self, path):
