@@ -39,7 +39,7 @@
                 <template x-for="(subtitle, index) in balanceBox.subtitles" :key="index">
                         <span>
                             <span x-text="subtitle"></span><span
-                                :class="{ 'invisible': (balanceBox.subtitles.length == index+1) }"> &amp; </span>
+                                :class="{ 'invisible': (balanceBox.subtitles.length == index+1) }"> + </span>
                         </span>
                 </template>
             </div>
