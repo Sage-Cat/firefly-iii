@@ -395,6 +395,10 @@ function drawAChart(URL, container, chartType, options, colorData) {
             return;
         }
 
+        if (['categories-chart', 'expense-accounts-chart', 'revenue-accounts-chart'].indexOf(container) !== -1 && 'bar' === chartType) {
+            options = ledgerBarChartOptions(options, data, container);
+        }
+
         if (colorData) {
             data = colorizeData(data);
         }
@@ -447,4 +451,34 @@ function drawAChart(URL, container, chartType, options, colorData) {
         // console.error('Add error because error with chart.', reason);
         document.getElementById(container).classList.add('general-chart-error');
     });
+}
+
+function ledgerBarChartOptions(options, data, container) {
+    "use strict";
+    var datasets = data.datasets;
+    datasets.forEach(function (dataset) {
+        if ('revenue-accounts-chart' !== container
+            && ((dataset.currency_code && 'UAH' !== dataset.currency_code) || '₴' !== dataset.currency_symbol)) {
+            throw new Error('Category expenses require UAH data and currency metadata.');
+        }
+        if (typeof dataset.currency_symbol !== 'string' || '' === dataset.currency_symbol) {
+            throw new Error('Ledger charts require a dataset currency symbol.');
+        }
+    });
+    options.scales.yAxes.forEach(function (axis, index) {
+        var axisId = axis.id || 'y-axis-' + index;
+        var first = datasets.find(function (dataset) {
+            return dataset.yAxisID === axisId || String(dataset.yAxisID) === String(index);
+        }) || datasets[0];
+        var places = Number.isInteger(first.currency_decimal_places) ? first.currency_decimal_places : 2;
+        axis.ticks.callback = function (value) {
+            return accounting.formatMoney(anonymous ? 0 : value, first.currency_symbol, places);
+        };
+    });
+    options.tooltips.callbacks.label = function (item, chartData) {
+        var dataset = chartData.datasets[item.datasetIndex];
+        var precision = Number.isInteger(dataset.currency_decimal_places) ? dataset.currency_decimal_places : 2;
+        return dataset.label + ': ' + accounting.formatMoney(anonymous ? 0 : item.yLabel, dataset.currency_symbol, precision);
+    };
+    return options;
 }

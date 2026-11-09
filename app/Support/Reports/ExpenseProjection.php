@@ -102,8 +102,10 @@ final class ExpenseProjection
                 continue;
             }
             $name = RefundProjection::isRefund($journal) && null !== ($journal['refund_original_id'] ?? null)
-                ? $journal['refund_category_name'] ?? trans('firefly.no_category')
-                : $journal['category_name'] ?? trans('firefly.no_category');
+                ? $journal['refund_category_name'] ?? ''
+                : $journal['category_name'] ?? '';
+            $name           = trim((string) $name);
+            $name           = in_array($name, ['', 'Потребує уточнення'], true) ? 'Інше' : $name;
             $entries[$name] = bcadd($entries[$name] ?? '0.00', self::spending($journal), 2);
         }
         uasort($entries, static fn(string $left, string $right): int => bccomp($right, $left, 2));

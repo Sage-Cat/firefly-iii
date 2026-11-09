@@ -94,6 +94,13 @@ final class CategoryController extends Controller
             AccountTypeEnum::MORTGAGE->value,
             AccountTypeEnum::ASSET->value,
         ]);
+
+        if (\FireflyIII\Support\Reports\ReportingCurrency::isDisplayRequest()
+            && (string) $this->userGroup->id === (string) auth()->user()->user_group_id) {
+            return response()->json($this->clean(\FireflyIII\Support\Reports\CategoryOverview::overview(
+                $accounts, $start, $end, $this->user, $this->userGroup, $this->primaryCurrency->code
+            )));
+        }
         $currencies = [];
         $return     = [];
         $converter  = new ExchangeRateConverter();
