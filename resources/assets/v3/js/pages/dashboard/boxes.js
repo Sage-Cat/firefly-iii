@@ -33,6 +33,32 @@ function dashboardMoney(amount, currencyCode) {
     return formatMoney(amount, currencyCode, dashboardCurrencyDecimals[currencyCode], dashboardCurrencySymbols[currencyCode]);
 }
 
+function dashboardFlowSubtitles(data, anonymous) {
+    // Mask every flow equally; the presence of a subtitle must not reveal real zeroes.
+    if (anonymous) {
+        return [];
+    }
+    const currencies = new Map();
+    for (const row of Object.values(data || {})) {
+        if (!row || typeof row.key !== 'string' || typeof row.currency_code !== 'string') {
+            continue;
+        }
+        const kind = row.key.startsWith('earned-in-') ? 'earned' : (row.key.startsWith('spent-in-') ? 'spent' : null);
+        if (!kind || /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:e[+-]?\d+)?$/i.test(String(row.monetary_value).trim())) {
+            continue;
+        }
+        const amount = dashboardMoney(row.monetary_value, row.currency_code);
+        if (!amount) {
+            continue;
+        }
+        if (!currencies.has(row.currency_code)) {
+            currencies.set(row.currency_code, {earned: [], spent: []});
+        }
+        currencies.get(row.currency_code)[kind].push(amount);
+    }
+    return Array.from(currencies.values(), row => [...row.earned, ...row.spent].join(' + '));
+}
+
 export default () => ({
     balanceBox: { amounts: [], subtitles: [] },
     billBox: { paid: [], unpaid: [] },
@@ -102,7 +128,6 @@ export default () => ({
         this.billBox = { paid: [], unpaid: [] };
         this.leftBox = { left: [], perDay: [] };
         this.netBox = { net: [] };
-        let subtitles = {};
         // process new content:
         for (const i in data) {
             if (Object.hasOwn(data, i)) {
@@ -117,32 +142,6 @@ export default () => ({
                     );
                     continue;
                 }
-                // spent info is used in subtitle:
-                if (key.startsWith("spent-in-")) {
-                    // prep subtitles (for later)
-                    if (!Object.hasOwn(subtitles, current.currency_code)) {
-                        subtitles[current.currency_code] = "";
-                    }
-                    // append the amount spent.
-                    subtitles[current.currency_code] =
-                        subtitles[current.currency_code] +
-                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code);
-                    continue;
-                }
-                // earned info is used in subtitle:
-                if (key.startsWith("earned-in-")) {
-                    // prep subtitles (for later)
-                    if (!Object.hasOwn(subtitles, current.currency_code)) {
-                        subtitles[current.currency_code] = "";
-                    }
-                    // prepend the amount earned.
-                    subtitles[current.currency_code] =
-                        dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code) +
-                        " + " +
-                        subtitles[current.currency_code];
-                    continue;
-                }
-
                 if (key.startsWith("bills-unpaid-in-")) {
                     this.billBox.unpaid.push(
                         dashboardMoney(this.anonymous ? 0 : current.monetary_value, current.currency_code),
@@ -183,11 +182,7 @@ export default () => ({
                 Number(row.monetary_value) > 0,
         );
         this.noMoneyLeft = this.anonymous ? true : this.noMoneyLeft;
-        for (let i in subtitles) {
-            if (Object.hasOwn(subtitles, i)) {
-                this.balanceBox.subtitles.push(subtitles[i]);
-            }
-        }
+        this.balanceBox.subtitles = dashboardFlowSubtitles(data, this.anonymous);
         this.loading = false;
     },
     loadBoxes() {

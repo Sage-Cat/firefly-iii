@@ -78,10 +78,10 @@
             <div class="col-lg-4 col-md-6 col-sm-12 col-xs-12">
                 <div class="card mb-2">
                     <div class="card-header">
-                        <h3 class="card-title">pay-off by date</h3>
+                        <h3 class="card-title">{{ __('interface.payoff_by_date') }}</h3>
                     </div>
                     <div class="card-body">
-                        Content
+                        {{ __('interface.content_placeholder') }}
                     </div>
                 </div>
             </div>

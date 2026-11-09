@@ -1,5 +1,5 @@
 <div class="row mb-2" x-data="boxes" id="box_out_holder">
-    <div class="col-xl-4 col-lg-4 col-md-6 col-sm-12">
+    <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6 col-12">
         <div class="small-box text-bg-indigo">
             <div class="inner balance-box">
                 <h4 class="hover-expand">
@@ -39,7 +39,7 @@
                 <template x-for="(subtitle, index) in balanceBox.subtitles" :key="index">
                         <span>
                             <span x-text="subtitle"></span><span
-                                :class="{ 'invisible': (balanceBox.amounts.length == index+1) }"> &amp; </span>
+                                :class="{ 'invisible': (balanceBox.subtitles.length == index+1) }"> &amp; </span>
                         </span>
                 </template>
             </div>
@@ -47,8 +47,61 @@
         <!--end::Small Box Widget 1-->
     </div>
     <!--end::Col-->
-
-    <div class="col-xl-4 col-lg-4 col-md-6 col-sm-12">
+    <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6 col-12" >
+        <!--begin::Small Box Widget 2-->
+        <div class="small-box text-bg-sky">
+            <div class="inner">
+                <template x-if="0 === billBox.unpaid.length">
+                    <h4 class="hover-expand">&mdash;</h4>
+                </template>
+                <template x-if="billBox.unpaid.length > 0">
+                    <h4 class="hover-expand">
+                        <template x-for="(amount, index) in billBox.unpaid" :key="index">
+                        <span>
+                            <span x-text="amount"></span><span :class="{ 'invisible': (billBox.unpaid.length == index+1) }">, </span>
+                        </span>
+                        </template>
+                    </h4>
+                </template>
+                <template x-if="loading">
+                    <p class="d-none d-sm-block">
+                    <span class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">{{ __('firefly.thinking') }}</span>
+                    </span>
+                    </p>
+                </template>
+                <template x-if="!loading && billBox.unpaid.length > 0">
+                    <p class="d-none d-sm-block"><a
+                            href="{{ route('subscriptions.index') }}">{{ __('firefly.bills_to_pay') }}</a></p>
+                </template>
+                <template x-if="0 === billBox.unpaid.length && !loading">
+                        <p class="d-none d-sm-block"><em>{{ __('firefly.no_waiting') }}</em></p>
+                </template>
+            </div>
+            <span class="small-box-icon d-none d-lg-block d-xl-block d-xxl-block">
+                <em class="bi bi-calendar"></em>
+            </span>
+            <span class="small-box-footer d-none d-xl-block">
+                <template x-if="0 === billBox.paid.length">
+                    <span>&nbsp;</span>
+                </template>
+                <template x-if="billBox.paid.length > 0">
+                    <span>
+                {{ __('firefly.paid') }}:
+                <template x-for="(amount, index) in billBox.paid" :key="index">
+                        <span>
+                            <span x-text="amount"></span><span
+                                :class="{ 'invisible': (billBox.paid.length == index+1) }">, </span>
+                        </span>
+                    </template>
+                        </span>
+                </template>
+            </span>
+        </div>
+        <!--end::Small Box Widget 2-->
+    </div>
+    <!--end::Col-->
+    <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6 col-12">
         <!--begin::Small Box Widget 3-->
         <div x-bind:class="{'small-box': true, 'text-bg-teal': !noMoneyLeft, 'text-bg-orange': noMoneyLeft}">
             <div class="inner">
@@ -97,7 +150,7 @@
         <!--end::Small Box Widget 3-->
     </div>
     <!--end::Col-->
-    <div class="col-xl-4 col-lg-4 col-md-6 col-sm-12">
+    <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6 col-12">
         <!--begin::Small Box Widget 4-->
         <div class="small-box text-bg-fuchsia">
             <div class="inner">

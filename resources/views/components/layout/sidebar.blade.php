@@ -2,7 +2,7 @@
     class="nav sidebar-menu flex-column"
     data-lte-toggle="treeview"
     role="navigation"
-    aria-label="Main navigation"
+    aria-label="{{ __('interface.main_navigation') }}"
     data-accordion="false"
     id="navigation"
     x-data="sidebar"

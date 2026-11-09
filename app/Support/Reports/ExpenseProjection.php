@@ -35,16 +35,24 @@ final class ExpenseProjection
             $accounts->pluck('name', 'id')->all(),
             $first,
             $last,
-            RefundProjection::merchantCredits(RefundProjection::metadata(auth()->user()), $start->format('Y-m-d'), $end->format('Y-m-d'))
+            RefundProjection::merchantCredits(RefundProjection::metadata(auth()->user()), $start->format('Y-m-d'), $end->format('Y-m-d')),
+            self::taxPayeeIdsFrom(self::withdrawals($start, $end))
         );
     }
 
-    public static function accountChartFromBalances(array $names, array $startBalances, array $endBalances, array $refundCredits = []): array
-    {
-        $entries = [];
+    public static function accountChartFromBalances(
+        array $names,
+        array $startBalances,
+        array $endBalances,
+        array $refundCredits = [],
+        array $taxPayeeIds = []
+    ): array {
+        $entries   = [];
+        $taxPayees = array_fill_keys(array_map('strval', $taxPayeeIds), true);
         foreach ($names as $id => $name) {
             $total = bcsub(self::nativeBalanceUAH($endBalances[$id] ?? [], $startBalances[$id] ?? []), $refundCredits[$id] ?? '0.00', 2);
             if (0 !== bccomp($total, '0', 2)) {
+                $name           = isset($taxPayees[(string) $id]) ? 'Податки' : $name;
                 $entries[$name] = bcadd($entries[$name] ?? '0.00', $total, 2);
             }
         }
@@ -551,6 +559,29 @@ final class ExpenseProjection
         $amount = self::amount($row, $target, true)['amount'];
 
         return RefundProjection::isRefund($row) ? bcsub('0', $amount, 2) : $amount;
+    }
+
+    /** Only payees whose selected-period charges and refunds are all confirmed taxes share a bar. */
+    public static function taxPayeeIdsFrom(array $journals): array
+    {
+        $taxPayees = [];
+        foreach ($journals as $journal) {
+            if ('Withdrawal' === ($journal['transaction_type_type'] ?? $journal['type'] ?? '')) {
+                $id       = (string) ($journal['destination_account_id'] ?? '');
+                $category = (string) ($journal['category_name'] ?? '');
+            } elseif (RefundProjection::isRefund($journal)) {
+                $id       = (string) ($journal['refund_merchant_id'] ?? $journal['source_account_id'] ?? '');
+                $category = null !== ($journal['refund_original_id'] ?? null) ? (string) ($journal['refund_category_name'] ?? '') : '';
+            } else {
+                continue;
+            }
+            if ('' === $id) {
+                continue;
+            }
+            $taxPayees[$id] = ($taxPayees[$id] ?? true) && in_array(trim($category), ['Податки ФОП', 'Податки'], true);
+        }
+
+        return array_map('strval', array_keys(array_filter($taxPayees)));
     }
 
     public static function withdrawals(Carbon $start, Carbon $end, null|Account $account = null): array

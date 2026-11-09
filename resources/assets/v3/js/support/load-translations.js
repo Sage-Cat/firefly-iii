@@ -48,7 +48,7 @@ function loadTranslations(language, locale) {
                         loadPath: "./v3/i18n/{{lng}}.json",
                     },
                     {
-                        loadPath: "./v3/i18n/{{lng}}.json",
+                        loadPath: (languages) => window.fireflyUkrainianUi.loadPath(languages),
                     },
                 ],
             },

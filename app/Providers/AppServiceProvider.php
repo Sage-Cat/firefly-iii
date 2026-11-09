@@ -45,6 +45,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->app['translation.loader']->addPath(resource_path('lang-overrides'));
+
         // do not check permissions for key files.
         Passport::$validateKeyPermissions = false;
 

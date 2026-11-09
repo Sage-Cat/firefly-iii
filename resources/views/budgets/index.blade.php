@@ -140,7 +140,7 @@
                                             <div class="progress-bar bg-warning"></div>
                                         </div>
                                         {{-- budgeted amount if enough or les --}}
-                                        <div class="progress progress-blue" role="progressbar" data-id="{{ $budget['id'] }}" aria-label="Segment three" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100" style="width: 20%">
+                                        <div class="progress progress-blue" role="progressbar" data-id="{{ $budget['id'] }}" aria-label="{{ __('firefly.budgeted') }}" aria-valuenow="20" aria-valuemin="0" aria-valuemax="100" style="width: 20%">
                                             <div class="progress-bar bg-info"></div>
                                         </div>
                                     </div>
