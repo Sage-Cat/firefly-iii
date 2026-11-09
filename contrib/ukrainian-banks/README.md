@@ -34,19 +34,20 @@ an official NBU stablecoin quote. Historical rate writes use bounded batches.
 
 ## Payment review
 
-Valid uncategorized payments are imported without a category. A suspected own
-transfer with an unconfirmed counterpart uses a zero-opening asset account
-marked `bank_review_suspense` for the original currency. Its opposing balance
-is provisional; it does not produce income or spending. Only needed suspense
+By default, valid uncategorized payments are imported without a category. A
+suspected own transfer with an unconfirmed counterpart uses a zero-opening
+asset account marked `bank_review_suspense` for the original currency. Its
+opposing balance is provisional; it does not produce income or spending. Only needed suspense
 accounts are provisioned, after a successful dry reconciliation in write mode.
 
 The native **Уточнення платежів** sidebar page at `/transactions/review` offers
 category suggestions based on confirmed history and clearly labelled bank
 hints. It never applies a suggestion automatically. Ordinary category choices
-update only the category relation. A queued transfer choice records a bound
-`bank_review` decision in the existing note JSON, preserving bank evidence;
-the next sync applies the counterpart or external category. Queued decisions
-remain immutable until applied, preventing a concurrent sync from losing a
+update the category and clear only its managed provisional marker. A queued
+transfer choice records a bound `bank_review` decision in the existing note
+JSON, preserving bank evidence; the next sync applies the counterpart or
+external category. Queued decisions remain immutable until applied,
+preventing a concurrent sync from losing a
 newer choice. Repeated imports preserve manual categories and resolved choices.
 
 Only same-currency owned accounts may be chosen as counterparts. Cross-bank
@@ -55,6 +56,29 @@ aliases. Separate similar payments are not collapsed. If both bank legs were
 already staged independently, `paired_pending` keeps them visible without a
 non-atomic merge; remaining valid payments continue importing. Resolve that
 pair conflict before finalizing its reroute.
+
+## Provisional category defaults
+
+Set `"auto_category_fallback": true` in a provider configuration to assign
+ordinary uncategorized income and spending to the actual `Інше` category after
+verified import, refunds and configured classification. This is opt-in and
+creates no financial movement. Own transfers and suspense records do not
+receive an ordinary fallback.
+
+Automatic defaults carry the managed tag `Потребує уточнення категорії` and
+remain in payment review as `Інше · потребує уточнення`. A confirmed rule or
+an explicit category choice removes only that tag. Choosing `Інше` explicitly
+also confirms it; existing manual `Інше` without the tag stays final. Ordinary
+bank settlement and partial amount/date/note updates retain provisional status.
+Unknown payments remain reviewable until classification is confirmed.
+
+The native default path uses `If-Category-Default`, `If-Match-Category` and
+`If-Match-Payment`. The last header binds the caller's complete payment
+snapshot, including owner metadata and financial scope, to locked reads.
+Concurrent edits return 409, preserving the newer owner choice. Classification
+and refund upgrades can replace provisional defaults, while final manual
+categories retain their existing protection. Amounts, notes and unrelated
+tags are preserved throughout.
 
 ## Pending monobank authorizations
 
@@ -86,9 +110,10 @@ minutes on the same day. Ambiguous matches remain available for review.
 
 Classification uses the native `Повернення коштів` category and this fork's
 `If-Match-Category` conditional API update. The expected category is checked
-while locking the journal; a stale category returns 409. Only the category
-relation changes, with rules and webhooks disabled. Native `Refund` links
-connect purchases to refunds without changing original movements or balances.
+while locking the journal; a stale category returns 409. Category changes also
+clear an existing provisional marker, with rules and webhooks disabled. Native
+`Refund` links connect purchases to refunds without changing original movements
+or balances.
 Reports treat refunds as expense credits rather than income; validated links
 credit the original category, budget, merchant and subscription on the refund
 date. Unlinked classified refunds remain separate expense credits.
@@ -113,10 +138,11 @@ Classification preserves manual categories and existing tags, skips ambiguous
 rules, refunds, unmanaged unsettled records and unresolved own transfers, and
 never creates financial movements. Category writes use `If-Match-Category`.
 Additive tag writes merge the freshly read list and use `If-Match-Tags` with
-the expected category; concurrent owner changes return 409. Both conditional
-paths disable rules and webhooks and leave amounts, dates, budgets and notes
-unchanged. Cashback rules classify only the actual net payout and may add a
-cashback tag; estimated bonuses and gross/tax adjustments are not synthesized.
+the expected category and full payment snapshot; concurrent owner changes
+return 409. Both conditional paths disable rules and webhooks and leave amounts,
+dates, budgets and notes unchanged. Cashback rules classify only the actual
+net payout and may add a cashback tag; estimated bonuses and gross/tax
+adjustments are not synthesized.
 
 ## Physical cards sharing one asset
 

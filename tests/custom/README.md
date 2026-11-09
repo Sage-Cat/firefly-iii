@@ -91,3 +91,11 @@ integration, account currencies and rollback. It uses isolated in-memory
 SQLite rows and loads this repository's controllers explicitly. The Python
 authorization suites cover pending/settled status, amount corrections, changed
 bank IDs, release coverage, interrupted retries and concurrent owner edits.
+
+`category_fallback.php` covers actual provisional categories, retained review
+entries, explicit confirmation of unchanged `Інше`, owner races and complete
+payment fingerprints. The authorization suite loads the native
+`JournalUpdateService` hook from this repository and checks that settlement
+retains the marker while explicit category edits finalize it. Python fixtures
+cover fallback opt-in, idempotent repeats and confirmed classification/refund
+upgrades without changing financial movements.
