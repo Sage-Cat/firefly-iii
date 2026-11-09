@@ -46,6 +46,15 @@ namespace FireflyIII\Enums {
 namespace FireflyIII\Support\Facades {
     final class Steam
     {
+        public static function accountsBalancesInRange($accounts, $start, $end, $currency, bool $convert): array
+        {
+            if ($convert || 'EUR' !== $currency->code) {
+                throw new \RuntimeException('Chart source balances must remain unconverted.');
+            }
+            ++$GLOBALS['merchantBalanceCalls'];
+            return $GLOBALS['merchantBalances'];
+        }
+
         public static function anonymous(): bool
         {
             return $GLOBALS['anonymous'] ?? false;
@@ -172,9 +181,12 @@ namespace Illuminate\Support {
             return [] === $this->items;
         }
 
-        public function pluck(string $key): object
+        public function pluck(string $key, null|string $index = null): object
         {
-            return new class(array_map(static fn($item) => $item->$key, $this->items)) {
+            $values = null === $index
+                ? array_map(static fn($item) => $item->$key, $this->items)
+                : array_column(array_map('get_object_vars', $this->items), $key, $index);
+            return new class($values) {
                 public function __construct(
                     private array $values
                 ) {}
@@ -198,14 +210,16 @@ namespace {
     use FireflyIII\Support\Reports\ExpenseProjection;
     use FireflyIII\Support\Reports\ReportingCurrency;
 
-    $requestPath     = '';
-    $requestType     = '';
-    $primary         = 'EUR';
-    $assetIds        = [];
-    $collectorRows   = [];
-    $modelPeriodRows = [];
-    $collectorCalls  = 0;
-    $checks          = 0;
+    $requestPath          = '';
+    $requestType          = '';
+    $primary              = 'EUR';
+    $assetIds             = [];
+    $collectorRows        = [];
+    $modelPeriodRows      = [];
+    $collectorCalls       = 0;
+    $merchantBalanceCalls = 0;
+    $merchantBalances     = [[], []];
+    $checks               = 0;
     function request(): object
     {
         return new class {
@@ -427,6 +441,69 @@ namespace {
     );
     check($accounts[0]['entries']['Shop'] === '300.00', 'Account charts convert native differences and ignore duplicate generic/pc balance fields.');
     check($accounts[0]['entries']['Refund'] === '-50.00', 'Refund differences are not converted to a new expense.');
+    $taxRows = [
+        row('tax-first', '-1', 'EUR', category: 'Податки ФОП') + ['destination_account_id' => 'tax-a'],
+        row('tax-second', '-1', 'USD', category: 'Податки') + ['destination_account_id' => 'tax-b'],
+        row('shopping', '-12', 'UAH', category: 'Покупки') + ['destination_account_id' => 'shop'],
+        row('mixed-tax', '-1', 'UAH', category: 'Податки ФОП') + ['destination_account_id' => 'mixed'],
+        row('mixed-other', '-1', 'UAH', category: 'Послуги') + ['destination_account_id' => 'mixed'],
+        row('unknown', '-1', 'UAH', category: null) + ['destination_account_id' => 'unknown'],
+        row('similar', '-1', 'UAH', category: 'Податки ФОП та інші послуги') + ['destination_account_id' => 'similar'],
+        row('incoming', '1', 'UAH', 'Deposit', category: 'Податки ФОП') + ['source_account_id' => 'deposit'],
+        row('transfer', '1', 'UAH', 'Transfer', category: 'Податки ФОП') + ['destination_account_id' => 'transfer'],
+        row('tax-refund', '0.3', 'EUR', 'Deposit', category: 'Повернення коштів')
+            + [
+                'is_refund'            => true,
+                'refund_original_id'   => 'tax-first',
+                'refund_category_name' => 'Податки ФОП',
+                'refund_merchant_id'   => 'tax-a',
+                'source_account_id'    => 'refund-processor'
+            ]
+    ];
+    $originalTaxRows = serialize($taxRows);
+    $taxIds          = ExpenseProjection::taxPayeeIdsFrom($taxRows);
+    check(
+        $taxIds === ['tax-a', 'tax-b'],
+        'Only exact confirmed tax-only payees share a bar; other deposits, transfers, mixed and unknown categories stay separate.'
+    );
+    check(
+        ExpenseProjection::taxPayeeIdsFrom([$taxRows[9]]) === ['tax-a'],
+        'A refund-only period follows the linked original merchant and tax category, never the refund processor.'
+    );
+    check(ExpenseProjection::taxPayeeIdsFrom([$taxRows[0], array_replace($taxRows[9], ['refund_category_name' => 'Послуги'])])
+    === [], 'A linked non-tax refund prevents a mixed merchant from being relabelled taxes.');
+    check(ExpenseProjection::taxPayeeIdsFrom([$taxRows[0], array_replace($taxRows[9], ['refund_original_id' => null, 'refund_merchant_id' => 'tax-a'])])
+    === [], 'An unlinked refund cannot infer a tax category.');
+    check(
+        ExpenseProjection::taxPayeeIdsFrom([]) === [] && serialize($taxRows) === $originalTaxRows,
+        'Classification has no invented IDs or source-record mutations.'
+    );
+    $taxNames   = ['tax-a' => 'Tax authority A', 'tax-b' => 'Tax authority B', 'shop' => 'Shop', 'mixed' => 'Mixed payee'];
+    $taxStart   = ['tax-a' => ['EUR' => '1', 'UAH' => '10'], 'tax-b' => ['USD' => '3']];
+    $taxEnd     = ['tax-a' => ['EUR' => '2', 'UAH' => '20'], 'tax-b' => ['USD' => '4'], 'shop' => ['UAH' => '12'], 'mixed' => ['UAH' => '2']];
+    $taxCredits = ['tax-a' => '15.00'];
+    $ungrouped  = ExpenseProjection::accountChartFromBalances($taxNames, $taxStart, $taxEnd, $taxCredits);
+    $callStart  = count(ReportingCurrency::$calls);
+    $taxChart   = ExpenseProjection::accountChartFromBalances($taxNames, $taxStart, $taxEnd, $taxCredits, $taxIds);
+    check(
+        $taxChart[0]['entries'] === ['Податки' => '85.00', 'Shop' => '12.00', 'Mixed payee' => '2.00'],
+        'The tax bar combines existing UAH equivalents after their original merchant refund credits.'
+    );
+    check((count(ReportingCurrency::$calls) - $callStart) === 5, 'Grouping does not add conversions to the native-currency balance projection.');
+    $sum = static fn(array $entries): string => array_reduce($entries, static fn(string $sum, string $value): string => bcadd($sum, $value, 2), '0.00');
+    check(
+        $sum($taxChart[0]['entries']) === $sum($ungrouped[0]['entries']) && $sum($taxChart[0]['entries']) === '99.00',
+        'The full signed chart total is unchanged by tax grouping.'
+    );
+    check(
+        $taxChart[0]['currency_code'] === 'UAH' && $taxChart[0]['currency_symbol'] === $ungrouped[0]['currency_symbol'],
+        'Tax aggregation preserves the original UAH chart metadata.'
+    );
+    $creditOnly = ExpenseProjection::accountChartFromBalances($taxNames, [], [], ['tax-a' => '25.00'], ['tax-a']);
+    check($creditOnly[0]['entries'] === ['Податки' => '-25.00'], 'A tax refund beyond period charges stays a negative tax credit.');
+    $cancelledTax = ExpenseProjection::accountChartFromBalances($taxNames, [], ['tax-a' => ['UAH' => '25'], 'tax-b' => ['UAH' => '-25']], [], $taxIds);
+    check($cancelledTax[0]['entries'] === ['Податки' => '0.00'], 'Equal opposite signed tax balances cancel within their one bar.');
+    check(ExpenseProjection::accountChartFromBalances($taxNames, [], [], [], $taxIds)[0]['entries'] === [], 'No tax balance creates no invented bar.');
     $current         = ['12' => ['EUR' => '10', 'USD' => '20', 'UAH' => '30', 'balance' => '100000', 'pc_balance' => '500000'], '13' => []];
     $start           = ['12' => ['EUR' => '2', 'USD' => '1', 'UAH' => '10']];
     $end             = ['12' => ['EUR' => '3', 'USD' => '0', 'UAH' => '20']];
@@ -476,6 +553,18 @@ namespace {
     check(
         count(ExpenseProjection::withdrawals(new \Carbon\Carbon('2026-11-01'), new \Carbon\Carbon('2026-11-07'))) === 1,
         'Expense collection rejects another owner and internal movements.'
+    );
+    $merchantBalances = [$taxStart, $taxEnd];
+    $collectorRows    = array_map(static fn(array $row): array => $row + ['source_account_id' => 'own'], array_slice($taxRows, 0, 5));
+    $nativeAccounts   = new \Illuminate\Support\Collection(array_map(
+        static fn(string $id, string $name): object => (object) ['id' => $id, 'name' => $name],
+        array_keys($taxNames),
+        $taxNames
+    ));
+    $nativeTaxChart = ExpenseProjection::accountChart(new \Carbon\Carbon('2026-11-01'), new \Carbon\Carbon('2026-11-07'), $nativeAccounts);
+    check(
+        $merchantBalanceCalls === 1 && $nativeTaxChart[0]['entries'] === ['Податки' => '100.00', 'Shop' => '12.00', 'Mixed payee' => '2.00'],
+        'The homepage method actually applies category-based aliases to its existing scoped native balances.'
     );
     $modelPeriodRows = [
         $modelRow,
