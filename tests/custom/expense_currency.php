@@ -417,7 +417,7 @@ namespace {
     ]);
     check(count($category) === 1 && $category[0]['currency_code'] === 'UAH', 'Category chart has one UAH series.');
     check(
-        $category[0]['entries']['Їжа'] === '75.00' && $category[0]['entries']['Без категорії'] === '80.00',
+        $category[0]['entries']['Їжа'] === '75.00' && $category[0]['entries']['Інше'] === '80.00',
         'Categorized and uncategorized expenses use the same conversion.'
     );
     $accounts = ExpenseProjection::accountChartFromBalances(
