@@ -254,7 +254,7 @@
                                                     <input disabled readonly aria-describedby="budgeted_{{ $budget['id'] }}" class="form-control" data-original="0" data-id="0" data-currency="{{ $primaryCurrency['id'] }}" data-limit="0" value="0" autocomplete="off" min="0" name="amount" type="number">
                                                 @endif
                                                 @if(count($budget['budgeted']) < count($currencies))
-                                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><em class="bi bi-caret-down"></em></button>
+                                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-config='{"popperConfig":{"strategy":"fixed"}}' aria-expanded="false"><em class="bi bi-caret-down"></em></button>
                                                 <ul class="dropdown-menu dropdown-menu-end">
                                                     <li>
                                                         <a href="#" class="dropdown-item create_bl" data-id="{{ $budget['id'] }}">
@@ -286,7 +286,7 @@
                                                         @if($anonymous)
                                                             <input disabled readonly class="form-control budget_amount" data-original="0" data-id="0" data-limit="0" value="0" autocomplete="off" min="0" name="amount" type="number">
                                                         @endif
-                                                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><em class="bi bi-caret-down"></em></button>
+                                                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-config='{"popperConfig":{"strategy":"fixed"}}' aria-expanded="false"><em class="bi bi-caret-down"></em></button>
                                                         <ul class="dropdown-menu dropdown-menu-end">
                                                             <li>
                                                                 <a class="dropdown-item delete_bl" href="#" data-budget-limit-id="{{ $budgetLimit['id'] }}">
@@ -331,7 +331,7 @@
 
 
                                         <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-config='{"popperConfig":{"strategy":"fixed"}}' aria-expanded="false">
                                                 {{ __('firefly.actions') }}
                                             </button>
                                             <ul class="dropdown-menu">
