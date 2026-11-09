@@ -28,8 +28,9 @@ daily net worth valuation. The dashboard JavaScript check executes the
 native source module without network or DOM access. PHP fixtures replace
 selected collaborators and do not require a database or user state.
 
-The reporting profile presents expenses and budgets in UAH, profit in the
-selected UAH or EUR currency, and the net-worth card and daily history in EUR.
+The reporting profile presents expenses, revenue accounts and budgets in UAH,
+profit in the selected UAH or EUR currency, and the net-worth card and daily
+history in EUR.
 The other dashboard cards retain their original currencies. Net worth uses
 the report-day NBU UAH bridge and rounds the combined portfolio once.
 USDT follows the explicit 1:1 USD valuation convention via the NBU UAH bridge;
@@ -64,6 +65,8 @@ Generated `public/build` files remain ignored by Git.
 
 Currency display checks keep native PHP rounding, locale, colour, precision
 and anonymous masking while normalizing currency symbols and legacy aliases.
+UAH uses `₴`; the exact legacy aliases `грн`, `грн.` and `₴` resolve to the
+same symbol without replacing raw bank text, currency codes or account names.
 `currency_symbols_php.php` compares the native formatter against a fixed
 baseline fixture and verifies that currency models remain unchanged.
 `currency_display.mjs` covers exact decimal strings, fiat/token precision,
@@ -91,6 +94,12 @@ authoritative. When using dependencies from an older separate installation,
 preload the checked helper with
 `php -d auto_prepend_file=app/Support/Reports/CurrencyDisplay.php` for PHP
 fixture processes.
+
+`revenue_chart.php` reconciles genuine income sources with the UAH income
+ledger, including current NBU conversion and refund exclusions. Revenue,
+expense and category chart renderers reject non-UAH metadata; stale EUR
+amounts cannot be relabelled as hryvnia. Generic charts retain their original
+currency metadata and formatting.
 
 Payment-review checks cover recommendation-only choices, owner/category/account
 scope, stale requests, immutable queued decisions, category-only writes and
@@ -198,3 +207,19 @@ node tests/custom/dashboard_period_layout.mjs node_modules/chart.js/dist/chart.u
 The last check uses a fresh headless Chrome profile with synthetic responses.
 It verifies desktop/mobile plot bounds and that both native chart runtimes
 keep period controls visible after empty or failed requests.
+
+`interface_readability.mjs` uses the actual Vite CSS, native chart source
+hooks and real Chart.js 2/4 in fresh Chrome profiles. It compares the original
+root size with the 106.25% scale at desktop, tablet and mobile widths, checking
+control hierarchy, 13px chart fonts, revenue-before-expense order and overflow:
+
+```sh
+node tests/custom/interface_readability.mjs
+```
+
+Shared Sass applies the root scale in all six layouts. Legacy consumers load
+the existing `charts.defaults.js` after the unchanged Chart.js bundle; its
+content hash, SRI and CSP nonce cover all sixteen view references.
+The browser helper uses CDP device emulation and asserts the actual 390px
+viewport rather than Chrome's minimum window width. The native budget table
+keeps its own responsive scroll container when larger text needs more room.

@@ -29,10 +29,11 @@ This fork adds a Ukrainian finance reporting profile while retaining the upstrea
 - NBU exchange rates and report-day conversion through UAH, with final-sum rounding.
 - A combined EUR net-worth card and daily history, with original currencies retained in the other dashboard cards.
 - Consolidated UAH/EUR profit charts with independent three-month monthly and weekly tables in a right-hand column.
-- UAH expense and budget views with simplified navigation.
-- Shared display symbols for UAH (`грн`), EUR (`€`), USD (`$`), CHF (`₣`) and USDT (`₮`), including native and legacy amount formatters.
+- UAH expense, revenue-account and budget views with simplified navigation.
+- Shared display symbols for UAH (`₴`), EUR (`€`), USD (`$`), CHF (`₣`) and USDT (`₮`), including native and legacy amount formatters.
 - Four responsive dashboard summary tiles, with exact-zero cash-flow details omitted and all flow subtitles hidden in anonymous mode.
 - Independent 30-day, three-month and one-year selectors for all five homepage charts, using server dates in Europe/Kyiv and preserving other chart choices.
+- Revenue accounts before expense accounts on the homepage, with slightly larger interface and chart typography.
 - A compact, accessible payment-review page with the existing explicit category and transfer decisions preserved.
 - A single expense-chart tax bar for payees whose selected-period charges and linked refunds use only the exact confirmed tax categories; mixed and unknown payees remain separate.
 - Narrow Ukrainian interface overrides shared by native PHP translations and generated frontend JSON.
