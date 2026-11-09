@@ -228,3 +228,14 @@ real Bootstrap cases check the last menu item's hit target before and after
 horizontal scrolling, with one/six rows at actual 390px/1440px widths. The
 check uses the installed Bootstrap bundle; an optional argument overrides its
 path.
+
+Homepage rankings select positive net UAH values after the full server refund,
+tax-grouping and NBU calculations: top three expense/income accounts and top
+five categories. Exact cent comparisons preserve large amounts and stable
+ties. The complete API response and report totals remain unchanged; fewer
+available entries are shown without padding or invented aggregate bars.
+`category_chart_js.cjs` executes the native ranking and refresh hooks,
+including palettes applied after the standard colorizer and empty states.
+The readability fixture checks the paired expense-left/income-right layout
+at the 768px boundary, mobile stacking, full titles and the separate account
+sidebar while retaining the existing typography and menu checks.
