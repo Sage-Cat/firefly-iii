@@ -78,7 +78,7 @@ const chartColumn = native.view.slice(native.view.indexOf('    <div class="row" 
     .replace(/@include\('reports\.dashboard-(?:capital-note|chart-period)'[^\n]*/g, toolbar)
     .replace(/\{\{[\s\S]*?\}\}/g, expression => expression.includes('expense_accounts') ? 'Рахунки витрат'
         : expression.includes('revenue_accounts') ? 'Рахунки доходів' : expression.includes('categories') ? 'Категорії' : 'Бюджети та витрати');
-const dashboard = chartColumn + '<aside class="col-lg-4"><div class="card card-body">Останні операції <span class="small">Приклад запису</span></div></aside></div>';
+const dashboard = chartColumn + '<aside id="all_transactions" class="col-lg-4"><div class="card card-body">Останні операції <table class="table table-valign-middle table-sm table-hover"><tbody><tr><td>→</td><td>ДУЖЕДОВГАНАЗВАОТРИМУВАЧА</td><td class="text-end w-30"><span class="money-negative text-nowrap">-12&nbsp;345,67&nbsp;₴</span></td></tr></tbody></table></div></aside></div>';
 const table = '<div class="table-responsive"><table class="table"><thead><tr><th>Категорія</th><th>Період</th><th class="text-end">Залишок</th></tr></thead><tbody><tr><td>Підписки й робочі послуги</td><td>Листопад 2026</td><td class="text-end text-nowrap">12 345,67 ₴</td></tr></tbody></table></div>';
 const budget = `<div class="card"><div class="card-header"><h2 class="card-title">Бюджети та витрати</h2></div><div class="card-body"><p>Ліміти поточного місяця</p>${table}<label class="form-label" for="budget-limit">Сума ліміту</label><input id="budget-limit" class="form-control" value="12 345,67"><button class="btn btn-primary mt-2">Переглянути</button></div></div>`;
 const profit = `<div class="card card-body"><h2>Доходи, витрати та результат</h2><div class="d-flex flex-wrap gap-3 mb-3"><div class="btn-group"><a class="btn btn-sm btn-primary">₴</a><a class="btn btn-sm btn-outline-secondary">€</a></div><div class="btn-group"><a class="btn btn-sm btn-outline-secondary">30 днів</a><a class="btn btn-sm btn-outline-secondary">3 місяці</a><a class="btn btn-sm btn-outline-secondary">1 рік</a></div></div><form class="row g-2 align-items-end"><div class="col-sm-4"><label class="form-label">Від</label><input type="date" class="form-control" value="2026-10-11"></div><div class="col-sm-4"><label class="form-label">До</label><input type="date" class="form-control" value="2026-11-09"></div><div class="col-sm-4"><button class="btn btn-primary" type="button">Показати</button></div></form><p class="small mt-2">Валюта цього звіту не змінює основну валюту системи.</p>${table}</div>`;
@@ -99,7 +99,7 @@ const Chart=index<2?window.Chart4:window.Chart;
 const options={responsive:true,maintainAspectRatio:false,animation:false};
 window.chartInstances.push(new Chart(document.getElementById(id),{type:'bar',data:{labels:['Жовтень','Листопад'],datasets:[{label:'Приклад',data:[10,20]}]},options}));
 }
-setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);const controls=Array.from(document.querySelectorAll('input,select,button,.btn'));document.body.setAttribute('data-check',JSON.stringify({width:innerWidth,page:document.documentElement.scrollWidth,root:css('html'),body:css('body'),heading:css('#type-heading'),small:css('#type-small'),normal:css('#type-normal'),button:css('#type-button'),smallButton:css('#type-small-button'),largeButton:css('#type-large-button'),input:css('#type-input'),fonts:[window.Chart4.defaults.font.size,window.Chart.defaults.global.defaultFontSize],canvas:window.chartInstances.map(chart=>({height:chart.canvas.getBoundingClientRect().height,width:chart.canvas.getBoundingClientRect().width})),overflow:controls.filter(node=>node.getBoundingClientRect().right>innerWidth+1||node.getBoundingClientRect().left< -1).map(node=>node.outerHTML.slice(0,100)),order:Array.from(document.querySelectorAll('[data-chart]')).map(node=>node.dataset.chart),errors:window.errors}));},1000);
+setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize);const controls=Array.from(document.querySelectorAll('input,select,button,.btn'));document.body.setAttribute('data-check',JSON.stringify({width:innerWidth,page:document.documentElement.scrollWidth,root:css('html'),body:css('body'),heading:css('#type-heading'),small:css('#type-small'),normal:css('#type-normal'),button:css('#type-button'),smallButton:css('#type-small-button'),largeButton:css('#type-large-button'),input:css('#type-input'),fonts:[window.Chart4.defaults.font.size,window.Chart.defaults.global.defaultFontSize],widgetAmount:document.querySelector('#all_transactions .money-negative').textContent,widgetWhiteSpace:getComputedStyle(document.querySelector('#all_transactions .money-negative')).whiteSpace,canvas:window.chartInstances.map(chart=>({height:chart.canvas.getBoundingClientRect().height,width:chart.canvas.getBoundingClientRect().width})),overflow:controls.filter(node=>node.getBoundingClientRect().right>innerWidth+1||node.getBoundingClientRect().left< -1).map(node=>node.outerHTML.slice(0,100)),order:Array.from(document.querySelectorAll('[data-chart]')).map(node=>node.dataset.chart),errors:window.errors}));},1000);
 `;
         const html = '<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>' + native.css + '</style>'
             + (increased ? typography : '') + styles('dashboard-capital-note.blade.php') + styles('dashboard-chart-period-scripts.blade.php') + styles('subscription-overview.blade.php') + styles('payment-review.blade.php')
@@ -114,7 +114,7 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
         const dom = fs.readFileSync(output + '.html', 'utf8');
         const encoded = dom.match(/data-check="([^"]+)"/)?.[1];
         assert.ok(encoded, 'The real browser fixture must complete');
-        const result = JSON.parse(encoded.replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
+        const result = JSON.parse(encoded.replaceAll('&quot;', '"').replaceAll('&amp;', '&').replaceAll('&nbsp;', '\u00a0'));
         assert.equal(result.width, width, 'Chrome must use the requested device viewport rather than its minimum window width');
         assert.deepEqual(result.errors, []);
         assert.ok(Math.abs(result.body - (increased ? 15.3 : 14.4)) < 0.02, 'The existing 0.9rem base gains approximately one pixel');
@@ -122,6 +122,8 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
         assert.ok(result.heading > result.body && result.small < result.body, 'Heading and helper text hierarchy is preserved');
         assert.ok(result.smallButton < result.button && result.button < result.largeButton && Math.abs(result.input - result.button) < 0.02, 'Bootstrap control sizes keep their hierarchy');
         assert.deepEqual(result.fonts, [13, 13], 'Real Chart.js 4 and 2 use the larger default font');
+        assert.equal(result.widgetAmount, '-12\u00a0345,67\u00a0₴', 'Wrapping keeps the original displayed amount intact');
+        assert.equal(result.widgetWhiteSpace, 'nowrap', 'The mobile wrapping rule respects nowrap amounts');
         assert.ok(result.page <= result.width + 1 && result.overflow.length === 0, 'Representative money UI must not overflow horizontally: ' + JSON.stringify(result));
         assert.deepEqual(result.order, chartNames);
         assert.ok(result.canvas.every((canvas, index) => Math.abs(canvas.height - (result.width <= 767 ? 280 : index === 0 ? 360 : 400)) <= 1 && canvas.width > 0 && canvas.width <= result.width), 'Existing desktop/mobile chart height constraints are preserved: ' + JSON.stringify(result.canvas));
@@ -137,7 +139,7 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
                 const output = fixture + '-viewport';
                 execFileSync(process.execPath, [fileURLToPath(new URL('./browser_viewport.cjs', import.meta.url)), fixture, String(width), output], {stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000});
                 const dom = fs.readFileSync(output + '.html', 'utf8');
-                const result = JSON.parse(dom.match(/data-check="([^"]+)"/)[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
+                const result = JSON.parse(dom.match(/data-check="([^"]+)"/)[1].replaceAll('&quot;', '"').replaceAll('&amp;', '&').replaceAll('&nbsp;', '\u00a0'));
                 assert.equal(result.width, width);
                 assert.deepEqual(result.errors, []);
                 assert.ok(result.page <= width + 1 && result.position === 'fixed' && result.visibleBefore && result.visibleAfter, 'Every budget menu item remains visible and clickable outside the scroll clip: ' + JSON.stringify(result));
