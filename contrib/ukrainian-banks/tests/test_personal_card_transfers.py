@@ -139,17 +139,27 @@ class PersonalClassificationHookTest(unittest.TestCase):
         planned = {'openings': {}, 'operations': [], 'preserved_peers': {}, 'targets': {'1': '100.00'}}
         client = Mock()
         client.request.return_value = {'data': {'attributes': {'current_balance': '100.00'}}}
-        with patch('bank_classification.synchronize') as classify:
+        order = []
+        def classify_call(*args):
+            order.append('classification')
+        def fallback_call(*args):
+            self.assertEqual(['classification'], order)
+            self.assertIs(args[0], client)
+        with patch('bank_classification.synchronize', side_effect=classify_call) as classify, \
+             patch('category_fallback.synchronize', side_effect=fallback_call) as fallback:
             apply_plan(client, planned)
             classify.assert_not_called()
-            apply_plan(client, dict(planned, auto_classification=True))
+            fallback.assert_not_called()
+            apply_plan(client, dict(planned, auto_classification=True, auto_category_fallback=True))
             classify.assert_called_once()
             self.assertIs(classify.call_args.args[0], client)
+            fallback.assert_called_once()
         client.request.return_value = {'data': {'attributes': {'current_balance': '99.00'}}}
-        with patch('bank_classification.synchronize') as classify:
+        with patch('bank_classification.synchronize') as classify, patch('category_fallback.synchronize') as fallback:
             with self.assertRaises(Deferred):
-                apply_plan(client, dict(planned, auto_classification=True))
+                apply_plan(client, dict(planned, auto_classification=True, auto_category_fallback=True))
             classify.assert_not_called()
+            fallback.assert_not_called()
 
 
 if __name__ == '__main__':

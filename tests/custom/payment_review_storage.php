@@ -9,6 +9,7 @@ $app = require $fixtureAppRoot . '/bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 require getenv('REVIEW_SOURCE') ?: dirname(__DIR__, 2) . '/app/Support/Reports/PaymentReview.php';
 require getenv('REVIEW_CONTROLLER') ?: dirname(__DIR__, 2) . '/app/Http/Controllers/PaymentReviewController.php';
+require_once dirname(__DIR__, 2) . '/app/Support/Reports/PaymentMetadataState.php';
 
 use FireflyIII\Http\Controllers\PaymentReviewController;
 use FireflyIII\Models\Account;
@@ -33,6 +34,7 @@ $schema = DB::connection()->getSchemaBuilder();
 $tables = [
     'configuration'          => ['name:s', 'data:s'],
     'categories'             => ['user_id:i', 'user_group_id:i', 'name:s'],
+    'tags'                   => ['user_id:i', 'user_group_id:i', 'tag:s'],
     'accounts'               => ['user_id:i', 'user_group_id:i', 'name:s', 'active:i'],
     'transaction_groups'     => ['user_id:i', 'user_group_id:i', 'title:s'],
     'transaction_types'      => ['type:s'],
@@ -72,6 +74,14 @@ foreach ($tables as $table => $columns) {
 $schema->create('category_transaction_journal', static function (Blueprint $t): void {
     $t->integer('transaction_journal_id');
     $t->integer('category_id');
+});
+$schema->create('tag_transaction_journal', static function (Blueprint $t): void {
+    $t->integer('transaction_journal_id');
+    $t->integer('tag_id');
+});
+$schema->create('budget_transaction_journal', static function (Blueprint $t): void {
+    $t->integer('transaction_journal_id');
+    $t->integer('budget_id');
 });
 foreach ([
     ['id' => 1, 'name' => 'Продукти', 'user_group_id' => 1],

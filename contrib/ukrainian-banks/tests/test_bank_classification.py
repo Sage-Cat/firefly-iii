@@ -51,7 +51,7 @@ class Client:
                               "/categories": self.categories, "/tags": self.tags,
                               "/link-types": self.link_types, "/transaction-links": self.links}[path])
 
-    def request(self, method, path, data=None, *, category_match=None, tags_hash=None):
+    def request(self, method, path, data=None, *, category_match=None, tags_hash=None, category_default=False, payment_hash=None):
         self.calls.append((method, path, copy.deepcopy(data), category_match, tags_hash))
         if method == "POST":
             assert path in {"/categories", "/tags"}
@@ -73,10 +73,30 @@ class Client:
                        if j["transaction_journal_id"] == patch["transaction_journal_id"])
         if self.before_put:
             self.before_put(current)
+        if payment_hash is not None:
+            from firefly_api import payment_fingerprint
+            try:
+                actual_hash = payment_fingerprint(row['id'], current)
+            except ValueError:
+                actual_hash = None
+            if actual_hash != payment_hash:
+                raise RuntimeError('HTTP 409: Payment changed since it was read')
         if "category_id" in patch:
             assert set(patch) == {"transaction_journal_id", "category_id"}
             if (str(current["category_id"]) if current.get("category_id") else "none") != category_match:
                 raise RuntimeError("HTTP 409: Category changed since it was read")
+            from category_fallback import CATEGORY, MARKER, pending_default, unclassified
+            target = next(c["attributes"]["name"] for c in self.categories if c["id"] == patch["category_id"])
+            if category_default:
+                assert target == CATEGORY
+                if not unclassified(current):
+                    raise RuntimeError("HTTP 409: Payment is already classified")
+                if MARKER not in current["tags"]:
+                    current["tags"].append(MARKER)
+            elif current.get("category_name") == CATEGORY and not pending_default(current):
+                raise RuntimeError("HTTP 409: Payment was explicitly confirmed")
+            elif pending_default(current):
+                current["tags"] = [tag for tag in current["tags"] if tag != MARKER]
             current["category_id"] = patch["category_id"]
             current["category_name"] = next(c["attributes"]["name"] for c in self.categories
                                             if c["id"] == patch["category_id"])

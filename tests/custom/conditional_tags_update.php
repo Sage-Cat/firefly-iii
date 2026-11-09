@@ -12,17 +12,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 $tagChecks = $checks;
-$schema->create('tags', static function (Blueprint $t): void {
-    $t->increments('id');
-    $t->integer('user_group_id');
-    $t->text('tag');
-    $t->timestamps();
-    $t->softDeletes();
-});
-$schema->create('tag_transaction_journal', static function (Blueprint $t): void {
-    $t->integer('tag_id');
-    $t->integer('transaction_journal_id');
-});
 foreach ([
     1 => ['Owner tag', 1],
     2 => ['Кешбек', 1],

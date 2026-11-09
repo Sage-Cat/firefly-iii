@@ -14,6 +14,9 @@ set_exception_handler(static function (\Throwable $exception): void {
 require getenv('BANK_AUTHORIZATION_SOURCE') ?: dirname(__DIR__, 2) . '/app/Support/Reports/BankAuthorizationMutation.php';
 require dirname(__DIR__, 2) . '/app/Api/V1/Controllers/Models/Transaction/UpdateController.php';
 require dirname(__DIR__, 2) . '/app/Api/V1/Controllers/Models/Transaction/DestroyController.php';
+require dirname(__DIR__, 2) . '/app/Support/Reports/PaymentCategoryFinalization.php';
+require dirname(__DIR__, 2) . '/app/Support/Reports/PaymentReview.php';
+require dirname(__DIR__, 2) . '/app/Services/Internal/Update/JournalUpdateService.php';
 
 use FireflyIII\Api\V1\Requests\Models\Transaction\UpdateRequest;
 use FireflyIII\Events\Model\TransactionGroup\TransactionGroupRequestsAuditLogEntry;
@@ -261,12 +264,18 @@ function fixture(string $currency = 'UAH'): void
         DB::table('journal_meta')->insert(['transaction_journal_id' => 1901, 'name' => $name, 'data' => json_encode($value)]);
     }
     DB::table('notes')->insert(['noteable_id' => 1901, 'noteable_type' => TransactionJournal::class, 'text' => authorizationNotes(currency: $currency)]);
-    foreach ([1 => 'Банк', 2 => 'imported', 3 => "A\u{2028}", 4 => BankAuthorizationMutation::PENDING_TAG] as $id => $tag) {
+    foreach ([
+        1 => 'Банк',
+        2 => 'imported',
+        3 => "A\u{2028}",
+        4 => BankAuthorizationMutation::PENDING_TAG,
+        5 => 'Потребує уточнення категорії'
+    ] as $id => $tag) {
         DB::table('tags')->insert(['id' => $id, 'user_id' => 1, 'user_group_id' => 1, 'tag' => $tag]);
         DB::table('tag_transaction_journal')->insert(['transaction_journal_id' => 1901, 'tag_id' => $id]);
     }
     foreach (['categories' => 31, 'budgets' => 41, 'bills' => 51] as $table => $id) {
-        DB::table($table)->insert(['id' => $id, 'user_id' => 1, 'user_group_id' => 1, 'name' => 'Owner assignment']);
+        DB::table($table)->insert(['id' => $id, 'user_id' => 1, 'user_group_id' => 1, 'name' => 'categories' === $table ? 'Інше' : 'Owner assignment']);
     }
     DB::table('category_transaction_journal')->insert(['transaction_journal_id' => 1901, 'category_id' => 31]);
     DB::table('budget_transaction_journal')->insert(['transaction_journal_id' => 1901, 'budget_id' => 41]);
@@ -315,7 +324,7 @@ function updateRequest(string $hash, string $status = 'settled', string $amount 
                 'amount'                 => $amount,
                 'notes'                  => authorizationNotes($status, $amount, $time, $currency->code),
                 'tags'                   => array_merge(
-                    ['Банк', 'imported', "A\u{2028}"],
+                    ['Банк', 'imported', "A\u{2028}", 'Потребує уточнення категорії'],
                     'pending' === $status ? [BankAuthorizationMutation::PENDING_TAG] : []
                 )
             ]]
@@ -433,10 +442,11 @@ verify(
     'Native update lost status, bank time or unrelated owner notes.'
 );
 verify(1794132000 === TransactionJournal::findOrFail(1901)->date->getTimestamp(), 'Native journal date diverged from bank time.');
-verify(
-    ['A' . "\u{2028}", 'imported', 'Банк'] === $journal->tags()->orderBy('tag')->pluck('tag')->all(),
-    'Native update lost manual tags or retained pending tag.'
-);
+verify(['A' . "\u{2028}", 'imported', 'Банк', 'Потребує уточнення категорії'] === $journal
+    ->tags()
+    ->orderBy('tag')
+    ->pluck('tag')
+    ->all(), 'Native update lost manual tags or retained pending tag.');
 verify(409 === destroyWith(fingerprint()), 'Settled authorization was deleted.');
 verify(409 === updateWith(updateRequest($oldHash)), 'Stale pending fingerprint updated settled state.');
 verify(422 === updateWith(updateRequest(fingerprint(), 'pending')), 'Settled authorization was demoted to pending.');
@@ -477,7 +487,7 @@ verify(
     && 'monobank:synthetic:row' === $archive['bank_identity']['external_id']
     && 31 === $archive['category_transaction_journal'][0]['category_id']
     && 41 === $archive['budget_transaction_journal'][0]['budget_id']
-    && 4 === count($archive['tag_transaction_journal'])
+    && 5 === count($archive['tag_transaction_journal'])
     && 'Synthetic owner audit' === $archive['audit_log_entries'][0]['message'],
     'Release archive lost classification, tags or owner audit.'
 );
@@ -702,6 +712,7 @@ $reflection->getProperty('groupRepository')->setValue($controller, $repository);
 Event::listen(UpdatedSingleTransactionGroup::class, static function ($event): void {
     verify(1 === DB::connection()->transactionLevel(), 'Native update event escaped CAS transaction.');
     verify(false === $event->flags->applyRules && false === $event->flags->fireWebhooks, 'Native event enabled rules or webhooks.');
+    verify(DB::table('tag_transaction_journal')->where('tag_id', 5)->exists(), 'Bank settlement finalized the provisional category.');
     verify('120' === bcadd((string) DB::table('transactions')->where('account_id', 22)->value('amount'), '0', 0), 'Native event ran before the ledger update.');
     throw new RuntimeException('Synthetic native controller event failure.');
 });
@@ -728,4 +739,33 @@ verify(
     422 === $destroyController->destroy(TransactionGroup::findOrFail(901))->getStatusCode(),
     'Installed delete guard did not intercept the optional header.'
 );
+Event::forget(UpdatedSingleTransactionGroup::class);
+foreach ([['amount' => '120.00'], ['notes' => authorizationNotes()], ['date' => '2026-11-08T11:00:01+02:00'], ['category_id' => '31']] as $partial) {
+    fixture();
+    $request = UpdateRequest::create('/api/v1/transactions/901', 'PUT', [
+        'apply_rules'   => false,
+        'fire_webhooks' => false,
+        'transactions'  => [['transaction_journal_id' => '1901'] + $partial]
+    ]);
+    $parsed   = $request->getAll()['transactions'][0];
+    $explicit = array_key_exists('category_id', $partial);
+    verify($explicit === array_key_exists('category_id', $parsed) && !array_key_exists('category_name', $parsed), 'Native parser invented a category field.');
+    Event::listen(UpdatedSingleTransactionGroup::class, static function () use ($explicit): void {
+        verify($explicit !== DB::table('tag_transaction_journal')->where('tag_id', 5)->exists(), 'Native partial update finalized the wrong category state.');
+        verify(DB::table('tag_transaction_journal')->where('tag_id', 4)->exists(), 'Native category confirmation changed authorization status.');
+        throw new RuntimeException('Synthetic category-finalization event boundary.');
+    });
+    $before = state();
+    try {
+        DB::transaction(static fn() => $controller->update($request, TransactionGroup::findOrFail(901)));
+        throw new RuntimeException('Native event boundary was not reached.');
+    } catch (RuntimeException $exception) {
+        verify(
+            'Synthetic category-finalization event boundary.' === $exception->getMessage(),
+            'Unexpected native category cleanup exception: ' . $exception->getMessage()
+        );
+    }
+    verify($before === state(), 'Native event failure did not roll back the category cleanup.');
+    Event::forget(UpdatedSingleTransactionGroup::class);
+}
 echo 'Passed ' . $checks . " bank authorization checks.\n";

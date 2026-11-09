@@ -211,7 +211,7 @@ class SyncTests(unittest.TestCase):
         self.assertTrue(sync.read_json(self.state / "active-state.json")["config"]["auto_refunds"])
 
     def test_opted_in_classification_runs_after_verified_import_and_refunds(self):
-        self.config.update(auto_refunds=True, auto_classification=True)
+        self.config.update(auto_refunds=True, auto_classification=True, auto_category_fallback=True)
         ledger = Ledger(self.accounts)
         sync.save_json(self.state / "config.json", self.config)
         sync.save_json(self.state / "snapshot.json", self.snapshot)
@@ -227,25 +227,34 @@ class SyncTests(unittest.TestCase):
             self.assertEqual(["refunds"], order)
             order.append("classification")
             return {"classified": 2}
+        def defaults(client, state):
+            self.assertIs(client, ledger)
+            self.assertEqual(self.state.parent / "category-fallback", state)
+            self.assertEqual(["refunds", "classification"], order)
+            return {"defaulted": 2}
         with patch.object(sync, "FireflyClient", return_value=ledger), patch.object(sync, "ensure_rates"), \
              patch("bank_refunds.synchronize", side_effect=refunds), \
-             patch("bank_classification.synchronize", side_effect=classify) as hook:
+             patch("bank_classification.synchronize", side_effect=classify) as hook, \
+             patch("category_fallback.synchronize", side_effect=defaults) as fallback_hook:
             result = sync.run("sync", True, self.state)
         self.assertEqual(1, hook.call_count)
         self.assertEqual({"classified": 2}, result["classification"])
+        self.assertEqual({"defaulted": 2}, result["category_fallback"])
+        fallback_hook.assert_called_once()
 
     def test_classification_is_opt_in_and_never_runs_for_an_import_plan(self):
         ledger = Ledger(self.accounts)
         sync.save_json(self.state / "config.json", self.config)
         sync.save_json(self.state / "snapshot.json", self.snapshot)
         with patch.object(sync, "FireflyClient", return_value=ledger), patch.object(sync, "ensure_rates"), \
-             patch("bank_classification.synchronize") as hook:
+             patch("bank_classification.synchronize") as hook, patch("category_fallback.synchronize") as fallback_hook:
             self.assertNotIn("classification", sync.run("sync", True, self.state))
-            self.config["auto_classification"] = True
+            self.config.update(auto_classification=True, auto_category_fallback=True)
             sync.save_json(self.state / "active-state.json", {
                 "config": self.config, "baseline": sync.read_json(self.state / "baseline.json")})
             sync.run("plan", True, self.state)
         hook.assert_not_called()
+        fallback_hook.assert_not_called()
 
     def test_unknown_own_transfer_becomes_uncategorized_review(self):
         import json

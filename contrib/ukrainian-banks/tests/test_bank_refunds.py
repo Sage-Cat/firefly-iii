@@ -24,7 +24,7 @@ def transaction(identifier, kind="withdrawal", value="27.50", **extra):
 
 
 def group(journal):
-    return {"id": "g-" + journal["transaction_journal_id"], "attributes": {"transactions": [journal]}}
+    return {"id": journal["transaction_journal_id"], "attributes": {"transactions": [journal]}}
 
 
 def link(original="1", refund="2", kind="refund"):
@@ -49,10 +49,10 @@ class Client:
                   "/categories": self.categories, "/transaction-links": self.links, "/link-types": self.types}
         return copy.deepcopy(values[path])
 
-    def request(self, method, path, data=None, *, category_match=None):
+    def request(self, method, path, data=None, *, category_match=None, payment_hash=None):
         self.calls.append((method, path, copy.deepcopy(data)))
         if method == "POST" and path == "/categories":
-            category = {"id": "category-refund", "attributes": {"name": data["name"]}}
+            category = {"id": "100", "attributes": {"name": data["name"]}}
             self.categories.append(category)
             return {"data": copy.deepcopy(category)}
         if method == "POST" and path == "/transaction-links":
@@ -69,9 +69,23 @@ class Client:
             raise AssertionError((method, path))
         if self.before_put:
             self.before_put(row)
+        if payment_hash is not None:
+            from firefly_api import payment_fingerprint
+            try:
+                actual_hash = payment_fingerprint(row['id'], row['attributes']['transactions'][0])
+            except ValueError:
+                actual_hash = None
+            if actual_hash != payment_hash:
+                raise RuntimeError('HTTP 409: Payment changed since it was read')
         current = row["attributes"]["transactions"][0].get("category_id")
         if (str(current) if current else "none") != category_match:
             raise RuntimeError("HTTP 409: Category changed since it was read")
+        from category_fallback import CATEGORY as DEFAULT_CATEGORY, MARKER, pending_default
+        journal = row["attributes"]["transactions"][0]
+        if journal.get("category_name") == DEFAULT_CATEGORY and not pending_default(journal):
+            raise RuntimeError("HTTP 409: Payment was explicitly confirmed")
+        if pending_default(journal):
+            journal["tags"] = [tag for tag in journal["tags"] if tag != MARKER]
         self.assert_category_only(data)
         for patch in data["transactions"]:
             journal = next(j for j in row["attributes"]["transactions"]
@@ -207,9 +221,32 @@ class RefundTests(unittest.TestCase):
         self.assertEqual(([], [], 1), (plan["updates"], plan["pairs"], plan["manual_preserved"]))
 
     def test_legacy_pending_category_can_be_replaced_with_explicit_refund(self):
-        client = Client([group(transaction("1")), group(transaction("2", "deposit", category_id="legacy", category_name=refunds.LEGACY_CATEGORY))])
+        client = Client([group(transaction("1")), group(transaction("2", "deposit", category_id="7", category_name=refunds.LEGACY_CATEGORY))])
         result = refunds.synchronize(client, self.state)
         self.assertEqual(1, result["classified"])
+
+    def test_pending_other_can_be_refined_but_final_other_is_preserved(self):
+        from category_fallback import CATEGORY as DEFAULT_CATEGORY, MARKER
+        for pending in (True, False):
+            with self.subTest(pending=pending):
+                tags = ["Owner tag", MARKER] if pending else ["Owner tag"]
+                client = Client([group(transaction("1")), group(transaction("2", "deposit", category_id="7",
+                                category_name=DEFAULT_CATEGORY, tags=tags))])
+                result = refunds.synchronize(client, self.state)
+                actual = client.groups[1]["attributes"]["transactions"][0]
+                self.assertEqual(int(pending), result["classified"])
+                self.assertEqual(["Owner tag"], actual["tags"])
+                self.assertEqual(refunds.CATEGORY if pending else DEFAULT_CATEGORY, actual["category_name"])
+
+    def test_finalizing_other_after_refund_plan_is_not_overwritten(self):
+        from category_fallback import CATEGORY as DEFAULT_CATEGORY, MARKER
+        client = Client([group(transaction("1")), group(transaction("2", "deposit", category_id="7",
+                        category_name=DEFAULT_CATEGORY, tags=["Owner tag", MARKER]))])
+        client.before_put = lambda row: row["attributes"]["transactions"][0]["tags"].remove(MARKER)
+        result = refunds.synchronize(client, self.state)
+        self.assertEqual(0, result["classified"])
+        self.assertGreaterEqual(result["stale_skipped"], 1)
+        self.assertEqual(DEFAULT_CATEGORY, client.groups[1]["attributes"]["transactions"][0]["category_name"])
 
     def test_native_existing_refund_link_is_reused_and_different_link_is_preserved(self):
         client = Client(links=[link()])
@@ -227,7 +264,7 @@ class RefundTests(unittest.TestCase):
 
     def test_split_group_category_patch_targets_only_the_explicit_refund_journal(self):
         original, returned, sibling = transaction("1"), transaction("2", "deposit"), transaction("3", "deposit", description="Unrelated income")
-        client = Client([group(original), {"id": "split-group", "attributes": {"transactions": [returned, sibling]}}])
+        client = Client([group(original), {"id": "20", "attributes": {"transactions": [returned, sibling]}}])
         before = copy.deepcopy(sibling)
         result = refunds.synchronize(client, self.state)
         self.assertEqual(1, result["classified"])

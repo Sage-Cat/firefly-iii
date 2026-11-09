@@ -117,19 +117,29 @@ class FopImportTests(unittest.TestCase):
                 self.assertEqual(['refunds'], order)
                 order.append('classification')
                 return {'classified': 1}
+            def defaults(client, path):
+                self.assertIs(client, ledger)
+                self.assertEqual(state.parents[1] / 'category-fallback', path)
+                self.assertEqual(['refunds', 'classification'], order)
+                return {'defaulted': 1}
             with patch('firefly_api.Client', return_value=ledger), patch('monobank_sync.ensure_rates'), \
                  patch('bank_refunds.synchronize', side_effect=refunds), \
-                 patch('bank_classification.synchronize', side_effect=classify) as hook:
+                 patch('bank_classification.synchronize', side_effect=classify) as hook, \
+                 patch('category_fallback.synchronize', side_effect=defaults) as fallback_hook:
                 self.assertNotIn('classification', synchronize('sync', state, cached=True))
                 hook.assert_not_called()
-                cfg.update(auto_refunds=True, auto_classification=True)
+                fallback_hook.assert_not_called()
+                cfg.update(auto_refunds=True, auto_classification=True, auto_category_fallback=True)
                 save_json(state / 'config.json', cfg)
                 synchronize('plan', state, cached=True)
                 hook.assert_not_called()
+                fallback_hook.assert_not_called()
                 result = synchronize('sync', state, cached=True)
                 self.assertEqual(0, result['repeat_creates'])
                 self.assertEqual({'classified': 1}, result['classification'])
                 self.assertEqual(1, hook.call_count)
+                self.assertEqual({'defaulted': 1}, result['category_fallback'])
+                fallback_hook.assert_called_once()
 
 
 if __name__=='__main__':unittest.main()
