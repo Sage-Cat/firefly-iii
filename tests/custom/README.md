@@ -231,7 +231,7 @@ path.
 
 Homepage rankings select positive net UAH values after the full server refund,
 tax-grouping and NBU calculations: top three expense/income accounts and top
-five categories. Exact cent comparisons preserve large amounts and stable
+seven categories. Exact cent comparisons preserve large amounts and stable
 ties. The complete API response and report totals remain unchanged; fewer
 available entries are shown without padding or invented aggregate bars.
 `category_chart_js.cjs` executes the native ranking and refresh hooks,
@@ -239,3 +239,8 @@ including palettes applied after the standard colorizer and empty states.
 The readability fixture checks the paired expense-left/income-right layout
 at the 768px boundary, mobile stacking, full titles and the separate account
 sidebar while retaining the existing typography and menu checks.
+
+Category colors follow normalized names rather than their rank or selected
+period. Related semantic groups share a hue family with distinct deterministic
+shades; unknown names use a stable hash fallback. Normalization affects only
+color selection, preserving the original labels, amounts and complete data.
