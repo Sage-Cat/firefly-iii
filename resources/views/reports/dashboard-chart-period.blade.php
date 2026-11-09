@@ -1,6 +1,6 @@
 @php
     $chartRange = \FireflyIII\Support\Reports\DashboardChartPeriods::forChart($chart);
-    $chartTitle = ['capital' => 'Чисті активи', 'budget' => 'Бюджети та витрати', 'category' => 'Категорії', 'expense' => 'Рахунки витрат', 'revenue' => 'Рахунки доходів'][$chart];
+    $chartTitle = ['capital' => 'Чисті активи', 'budget' => 'Бюджети та витрати', 'category' => 'Категорії. Топ 5', 'expense' => 'Рахунки витрат. Топ 3', 'revenue' => 'Рахунки доходів. Топ 3'][$chart];
 @endphp
 <div id="dashboard-{{ $chart }}-period" class="dashboard-chart-period d-flex flex-wrap align-items-center gap-2 mb-2">
     <div class="btn-group btn-group-sm" role="group" aria-label="Період графіка «{{ $chartTitle }}»">

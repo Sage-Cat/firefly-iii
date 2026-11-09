@@ -359,6 +359,7 @@ function drawAChart(URL, container, chartType, options, colorData) {
         //console.log('GET drawAChart('+URL+', '+container+')');
         containerObj.classList.remove('general-chart-error');
         var data = response.data;
+        data = ledgerTopChartData(data, container, chartType);
         // if result is empty array, or the labels array is empty, show error.
         // console.log(URL);
         // console.log(data.length);
@@ -402,6 +403,8 @@ function drawAChart(URL, container, chartType, options, colorData) {
         if (colorData) {
             data = colorizeData(data);
         }
+
+        data = ledgerTopChartColors(data, container, chartType);
 
         if (allCharts.hasOwnProperty(container)) {
             allCharts[container].data.datasets = data.datasets;
@@ -451,6 +454,55 @@ function drawAChart(URL, container, chartType, options, colorData) {
         // console.error('Add error because error with chart.', reason);
         document.getElementById(container).classList.add('general-chart-error');
     });
+}
+
+function ledgerTopChartData(data, container, chartType) {
+    "use strict";
+    var limits = {'categories-chart': 5, 'expense-accounts-chart': 3, 'revenue-accounts-chart': 3};
+    var limit = Object.hasOwn(limits, container) ? limits[container] : 0;
+    if (!limit || 'bar' !== chartType || typeof data === 'undefined' || Array.isArray(data) && data.length === 0
+        || data && Array.isArray(data.labels) && data.labels.length === 0) {
+        return data;
+    }
+    if (!data || !Array.isArray(data.labels) || !Array.isArray(data.datasets) || data.datasets.length !== 1
+        || !Array.isArray(data.datasets[0].data) || data.labels.length !== data.datasets[0].data.length) {
+        throw new Error('Dashboard rankings require one aligned UAH series.');
+    }
+    var dataset = data.datasets[0];
+    var ranked = data.labels.map(function (label, index) {
+        var value = dataset.data[index];
+        var match = /^(?:([+-]?))(\d+)(?:\.(\d+))?$/.exec(String(value));
+        if (!['string', 'number'].includes(typeof value) || !match || /[1-9]/.test((match[3] || '').slice(2))) {
+            throw new Error('Dashboard rankings require exact monetary amounts.');
+        }
+        var cents = BigInt(match[2]) * 100n + BigInt((match[3] || '').padEnd(2, '0').slice(0, 2));
+        if ('-' === match[1]) { cents = -cents; }
+        return {index: index, label: label, cents: cents};
+    }).filter(function (row) { return row.cents > 0n; }).sort(function (left, right) {
+        return left.cents === right.cents ? left.index - right.index : left.cents > right.cents ? -1 : 1;
+    }).slice(0, limit);
+    var selected = Object.assign({}, dataset);
+    ['data', 'backgroundColor', 'borderColor', 'hoverBackgroundColor', 'hoverBorderColor'].forEach(function (key) {
+        if (Array.isArray(dataset[key]) && dataset[key].length === data.labels.length) {
+            selected[key] = ranked.map(function (row) { return dataset[key][row.index]; });
+        }
+    });
+    return Object.assign({}, data, {count: ranked.length ? 1 : 0,
+        labels: ranked.map(function (row) { return row.label; }), datasets: ranked.length ? [selected] : []});
+}
+
+function ledgerTopChartColors(data, container, chartType) {
+    "use strict";
+    var palette = {'expense-accounts-chart': ['#fca5a5', '#f87171'], 'revenue-accounts-chart': ['#86efac', '#4ade80']};
+    var colors = 'bar' === chartType && Object.hasOwn(palette, container) ? palette[container] : null;
+    if (colors) {
+        data.datasets.forEach(function (dataset) {
+            dataset.backgroundColor = colors[0];
+            dataset.borderColor = colors[1];
+            dataset.borderWidth = 1;
+        });
+    }
+    return data;
 }
 
 function ledgerBarChartOptions(options, data, container) {
