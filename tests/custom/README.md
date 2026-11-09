@@ -223,3 +223,8 @@ content hash, SRI and CSP nonce cover all sixteen view references.
 The browser helper uses CDP device emulation and asserts the actual 390px
 viewport rather than Chrome's minimum window width. The native budget table
 keeps its own responsive scroll container when larger text needs more room.
+All three budget action/limit dropdowns use fixed Popper positioning. Twelve
+real Bootstrap cases check the last menu item's hit target before and after
+horizontal scrolling, with one/six rows at actual 390px/1440px widths. The
+check uses the installed Bootstrap bundle; an optional argument overrides its
+path.
