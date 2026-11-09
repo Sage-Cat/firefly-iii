@@ -100,5 +100,5 @@ const view = fs.readFileSync(new URL("../../resources/views/components/dashboard
 assert.equal((view.match(/col-xl-3 col-lg-6 col-md-6 col-sm-6 col-12/g) || []).length, 4);
 assert.equal((view.match(/in billBox\.unpaid"/g) || []).length, 1);
 assert.equal((view.match(/in billBox\.paid"/g) || []).length, 1);
-assert.ok(view.includes("(balanceBox.subtitles.length == index+1) }\"> &amp;"), "Filtered subtitle separators use the visible subtitle count.");
+assert.ok(view.includes("(balanceBox.subtitles.length == index+1) }\"> +"), "Cash-flow sums use plus signs between visible currencies.");
 console.log("Passed native dashboard currency, subscription, zero-flow and anonymous checks.");
