@@ -55,6 +55,11 @@ $primary: #1e6581; // original
 :root {
     font-size: 106.25%;
 }
+@media (max-width: 767px) {
+    #all_transactions td {
+        overflow-wrap: anywhere;
+    }
+}
 
 // btn-outline-secondary
 html[data-bs-theme="dark"] .btn-outline-secondary {
