@@ -15,7 +15,7 @@
     }
 
     #budgetList > thead > tr > th:nth-child(3) {
-        padding-inline-end: 3rem;
+        padding-inline-end: 4.25rem;
     }
 
     #budgetList .budget-usage { max-width: 18rem; }
