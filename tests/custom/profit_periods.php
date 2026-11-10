@@ -73,6 +73,8 @@ namespace {
     }
 
     $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    putenv('ACCOUNTING_START_DATE');
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/AccountingPeriod.php';
     require $fixtureAppRoot . '/vendor/autoload.php';
     require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/ProfitSummary.php';
@@ -488,5 +490,51 @@ namespace {
             'Monthly and weekly controller summaries net the same cancellation.'
         );
     }
+    putenv('ACCOUNTING_START_DATE=2026-11-05');
+    foreach ([1 => 'daily', 3 => 'weekly', 12 => 'monthly'] as $months => $granularity) {
+        $data = new ProfitReportController()->index(new ProfitRequest(['currency' => 'EUR', 'months' => (string) $months]))->data;
+        check(
+            $data['start']->format('Y-m-d') === '2026-11-05' && $data['end']->format('Y-m-d') === '2026-11-07',
+            'Every preset clamps only its start to the configured accounting boundary.'
+        );
+        check(
+            $data['summary']['granularity'] === $granularity && $data['summary']['totals'] === ['income' => '100.00', 'expenses' => '20.00', 'net' => '80.00'],
+            'A shortened annual/quarterly preset retains its resolution and excludes earlier flows.'
+        );
+        foreach (['monthly', 'weekly'] as $table) {
+            check(
+                $data[$table . 'Start']->format('Y-m-d') === '2026-11-05' && $data[$table . 'Summary']['points'][0]['start'] === '2026-11-05',
+                'Independent table bounds and first bucket dates stay within accounting coverage.'
+            );
+        }
+        check($data['firstDay'] === '2026-11-07', 'The history notice cannot advertise excluded earlier journals.');
+        $currencyLink = new ProfitReportController()->index(new ProfitRequest([
+            'currency' => 'UAH',
+            'months'   => (string) $months,
+            'start'    => '2026-11-05',
+            'end'      => '2026-11-07'
+        ]))->data;
+        check(
+            $currencyLink['summary']['granularity'] === $granularity,
+            'Currency links with the effective preset dates retain annual and quarterly resolution.'
+        );
+    }
+    $custom = new ProfitReportController()->index(new ProfitRequest([
+        'currency' => 'EUR',
+        'months'   => '12',
+        'start'    => '2026-11-06',
+        'end'      => '2026-11-07'
+    ]))->data;
+    check(
+        $custom['summary']['daily'] && $custom['start']->format('Y-m-d') === '2026-11-06',
+        'An independent custom range still chooses its own resolution and later start.'
+    );
+    try {
+        new ProfitReportController()->index(new ProfitRequest(['start' => '2026-10-01', 'end' => '2026-11-04']));
+        throw new RuntimeException('A wholly excluded custom range was accepted.');
+    } catch (RuntimeException $exception) {
+        check($exception->getCode() === 422, 'A custom range ending before accounting coverage returns validation 422.');
+    }
+    putenv('ACCOUNTING_START_DATE');
     echo 'Passed ' . $checks . " profit period checks.\n";
 }

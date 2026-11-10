@@ -93,6 +93,8 @@ namespace {
         };
     }
 
+    putenv('ACCOUNTING_START_DATE');
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/AccountingPeriod.php';
     require (getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2)) . '/vendor/autoload.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/DashboardChartPeriods.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
@@ -407,5 +409,23 @@ namespace {
     );
     check($collector->calls['setAccounts'][0]->pluck('id')->all() === [1], 'The chart collector still queries only owned asset accounts.');
 
+    ReportingCurrency::$day = '2026-11-09';
+    putenv('ACCOUNTING_START_DATE=2026-11-07');
+    context('capital_period=1y&budget_period=3m&category_period=1y&expense_period=3m&revenue_period=1y');
+    foreach (DashboardChartPeriods::all() as $range) {
+        check($range['start'] === '2026-11-07' && $range['end'] === '2026-11-09', 'Every homepage chart caption starts at accounting coverage.');
+    }
+    foreach (['30d', '3m', '1y'] as $period) {
+        context('dashboard_period=' . $period);
+        [$first, $last] = DashboardChartPeriods::requestRange(Carbon::parse('2020-01-01'), Carbon::parse('2020-02-01'));
+        check(
+            $first->format('Y-m-d H:i:s.u e') === '2026-11-07 00:00:00.000000 Europe/Kyiv' && $last->format('Y-m-d') === '2026-11-09',
+            'Dashboard API projection and displayed date range share the clamped inclusive boundary.'
+        );
+    }
+    context();
+    [$first, $last] = DashboardChartPeriods::requestRange($originalStart, $originalEnd);
+    check(sameDate($first, $originalStart) && sameDate($last, $originalEnd), 'Opt-in clamping does not change unrelated caller ranges.');
+    putenv('ACCOUNTING_START_DATE');
     echo 'Passed ' . $checks . " independent dashboard chart period checks.\n";
 }

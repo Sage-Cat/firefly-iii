@@ -54,6 +54,8 @@ namespace {
     }
 
     $fixtureAppRoot = getenv('FIREFLY_TEST_APP_ROOT') ?: dirname(__DIR__, 2);
+    putenv('ACCOUNTING_START_DATE');
+    require_once dirname(__DIR__, 2) . '/app/Support/Reports/AccountingPeriod.php';
     require $fixtureAppRoot . '/vendor/autoload.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
     require dirname(__DIR__, 2) . '/app/Support/Reports/NetWorthSeries.php';
@@ -85,5 +87,18 @@ namespace {
     }
     $GLOBALS['request'] = \Illuminate\Http\Request::create('/?capital_period=invalid');
     check(DashboardCapital::data()['period'] === '30d');
+    putenv('ACCOUNTING_START_DATE=2026-11-05');
+    foreach (['30d', '3m', '1y'] as $period) {
+        $GLOBALS['request'] = \Illuminate\Http\Request::create('/?capital_period=' . $period);
+        $data               = DashboardCapital::data();
+        $api                = DashboardCapital::api();
+        check($data['start'] === '2026-11-05' && count($data['points']) === 4);
+        check($data['points'][0]['total'] === '1980.00' && end($data['points'])['total'] === '2160.00');
+        check(array_key_first($api[0]['entries']) === '2026-11-05T12:00:00+02:00');
+    }
+    putenv('ACCOUNTING_START_DATE=2027-01-01');
+    $GLOBALS['request'] = \Illuminate\Http\Request::create('/?capital_period=1y');
+    check(DashboardCapital::data()['error'] !== null && DashboardCapital::api() === []);
+    putenv('ACCOUNTING_START_DATE');
     echo "Passed {$checks} dashboard history period checks.\n";
 }

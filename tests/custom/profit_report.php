@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+putenv('ACCOUNTING_START_DATE');
+require_once dirname(__DIR__, 2) . '/app/Support/Reports/AccountingPeriod.php';
+
 require_once dirname(__DIR__, 2) . '/app/Support/Reports/RefundProjection.php';
 require dirname(__DIR__, 2) . '/app/Support/Reports/ProfitSummary.php';
 require_once dirname(__DIR__, 2) . '/app/Support/Reports/CurrencyBridge.php';
