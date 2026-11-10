@@ -1,6 +1,7 @@
 @extends('layout.v3.session')
 @section('content')
-    <div class="row" x-data="index">
+    @include('reports.record-accounts')
+    <div class="row" x-data="index" data-record-accounts>
         <template x-if="true === loadingPage">
             <div class="col-lg-12 text-center">
                 <div id="status-box" class="p-3 install-box-border">
