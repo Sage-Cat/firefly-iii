@@ -72,6 +72,7 @@
                 <div class="card mb-3">
                     <div class="card-header"><h3 class="card-title">Доходи, витрати та результат · {{ \FireflyIII\Support\Reports\CurrencyDisplay::symbol($currency) }}</h3></div>
                     <div class="card-body">
+                        <p class="small text-muted">Точки {{ ['daily' => 'за днями', 'weekly' => 'за тижнями', 'monthly' => 'за місяцями'][$summary['granularity']] }}. Результат накопичується від початку обраного періоду.</p>
                         <div id="profit-chart-wrap"><canvas id="profit-chart" role="img" aria-label="Зведені доходи, витрати й залишок після витрат"></canvas></div>
                     </div>
                 </div>
@@ -131,11 +132,16 @@
         <script nonce="{{ $JS_NONCE }}">
             const profitPoints = @json($summary['points']);
             const profitCurrency = @json($currency);
-            const profitDaily = @json($summary['daily']);
+            const profitGranularity = @json($summary['granularity']);
             const profitMoney = {format: value => window.fireflyCurrencyDisplay.format(value, profitCurrency)};
             const profitLabels = profitPoints.map(function (point) {
-                const date = new Date(point.period + (profitDaily ? 'T12:00:00' : '-01T12:00:00'));
-                return date.toLocaleDateString('uk-UA', profitDaily ? {day: '2-digit', month: '2-digit'} : {month: 'short', year: 'numeric'});
+                if (profitGranularity === 'weekly') {
+                    return [point.start, point.end].map(day => new Date(day + 'T12:00:00')
+                        .toLocaleDateString('uk-UA', {day: '2-digit', month: '2-digit'})).join('–');
+                }
+                const daily = profitGranularity === 'daily';
+                const date = new Date(point.period + (daily ? 'T12:00:00' : '-01T12:00:00'));
+                return date.toLocaleDateString('uk-UA', daily ? {day: '2-digit', month: '2-digit'} : {month: 'short', year: 'numeric'});
             });
             new Chart(document.getElementById('profit-chart').getContext('2d'), {
                 type: 'bar',

@@ -31,8 +31,9 @@ final class ProfitSummary
         if ($last < $first || $first->diff($last)->days > 3660) {
             throw new InvalidArgumentException('Некоректний діапазон звіту.');
         }
-        $daily  = 'auto' === $granularity && $first->diff($last)->days <= 45;
-        $weekly = 'weekly' === $granularity;
+        $days   = $first->diff($last)->days;
+        $daily  = 'auto' === $granularity && $days <= 45;
+        $weekly = 'weekly' === $granularity || 'auto' === $granularity && !$daily && $days <= 92;
         $format = $daily ? 'Y-m-d' : ($weekly ? 'o-\WW' : 'Y-m');
         $step   = new DateInterval($daily ? 'P1D' : ($weekly ? 'P1W' : 'P1M'));
         $owned  = array_fill_keys(array_map('strval', $assetIds), true);
@@ -41,7 +42,7 @@ final class ProfitSummary
         while ($cursor <= $last) {
             $key          = $cursor->format($format);
             $points[$key] = ['period' => $key, 'income' => '0.00', 'expenses' => '0.00', 'net' => '0.00'];
-            if ('auto' !== $granularity) {
+            if ('auto' !== $granularity || $weekly) {
                 $next                  = $cursor->add($step)->sub(new DateInterval('P1D'));
                 $points[$key]['start'] = max($first, $cursor)->format('Y-m-d');
                 $points[$key]['end']   = min($last, $next)->format('Y-m-d');
@@ -102,7 +103,14 @@ final class ProfitSummary
         unset($point);
         $total['net'] = bcsub($total['income'], $total['expenses'], 2);
 
-        return ['totals' => $total, 'points' => array_values($points), 'daily' => $daily, 'transactions' => $count, 'manual_currencies' => array_keys($manual)];
+        return [
+            'totals'            => $total,
+            'points'            => array_values($points),
+            'daily'             => $daily,
+            'granularity'       => $daily ? 'daily' : ($weekly ? 'weekly' : 'monthly'),
+            'transactions'      => $count,
+            'manual_currencies' => array_keys($manual)
+        ];
     }
 
     public static function money(string $value): string

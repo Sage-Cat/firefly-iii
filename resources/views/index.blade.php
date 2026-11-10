@@ -79,28 +79,6 @@
                 </div>
             </div>
             <div class="row g-3 mb-2 dashboard-account-charts">
-                <div class="col-md-6 dashboard-account-expense">
-                    <!--EXPENSE ACCOUNTS -->
-                    <div class="card h-100">
-                        <div class="card-header">
-                            <div class="card-title"><a href="{{ route('accounts.index',['expense']) }}"
-                                                       title="Рахунки витрат. Топ 3">Рахунки витрат. Топ 3</a>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            @include('reports.dashboard-chart-period', ['chart' => 'expense', 'currency' => '₴'])
-                            <div class="dashboard-period-chart card-body p-0">
-                                <div class="dashboard-period-canvas">
-                                    <canvas id="expense-accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-footer text-end d-print-none">
-                            <a href="{{ route('accounts.index', ['expense']) }}" class="btn btn-primary btn-sm"><span
-                                    class="bi bi-cart"></span> {{ __('firefly.go_to_expense_accounts') }}</a>
-                        </div>
-                    </div>
-                </div>
                 <div class="col-md-6 dashboard-account-revenue">
                     <!--OPTIONAL REVENUE ACCOUNTS -->
                     <div class="card h-100">
@@ -121,6 +99,28 @@
                         <div class="card-footer text-end d-print-none">
                             <a href="{{ route('accounts.index', ['revenue']) }}" class="btn btn-primary btn-sm"><span
                                     class="bi bi-box-arrow-down"></span> {{ __('firefly.go_to_revenue_accounts') }}</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 dashboard-account-expense">
+                    <!--EXPENSE ACCOUNTS -->
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <div class="card-title"><a href="{{ route('accounts.index',['expense']) }}"
+                                                       title="Рахунки витрат. Топ 3">Рахунки витрат. Топ 3</a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            @include('reports.dashboard-chart-period', ['chart' => 'expense', 'currency' => '₴'])
+                            <div class="dashboard-period-chart card-body p-0">
+                                <div class="dashboard-period-canvas">
+                                    <canvas id="expense-accounts-chart" class="wide-chart" height="400" width="100%"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer text-end d-print-none">
+                            <a href="{{ route('accounts.index', ['expense']) }}" class="btn btn-primary btn-sm"><span
+                                    class="bi bi-cart"></span> {{ __('firefly.go_to_expense_accounts') }}</a>
                         </div>
                     </div>
                 </div>
