@@ -182,6 +182,21 @@ The conditional path writes only the Note, suppressing account-update
 financial hooks. Ordinary account API requests retain upstream behavior.
 Keep bindings, source rows, coverage evidence and backup plans private.
 
+## Accounting start
+
+The optional application setting `ACCOUNTING_START_DATE` limits financial
+chart and profit-report starts to a `YYYY-MM-DD` boundary. Leave it empty
+to retain the original periods. Recreate the application container after
+changing its environment. The setting does not delete or rewrite ledger data.
+
+The private capital-history configuration accepts `start_date`. Earlier
+valuations are removed from its plan; the latest known value is carried to
+the boundary as opening capital, never as income or expense. Preserve
+native ledger coverage and prepare a separate backed-up API plan before
+removing transactions or unfolding income embedded in an opening balance.
+Verify current balances and the authoritative bank-sync checkpoint as well
+as its compatibility mirror under the shared synchronization lock.
+
 ## Tests and scheduling
 
 Run the offline synthetic suite:
