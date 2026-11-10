@@ -71,6 +71,8 @@ final class DashboardChartPeriods
             default => $end->copy()->subDays(29)
         };
 
+        $start = Carbon::parse(AccountingPeriod::start($start->format('Y-m-d'), $end->format('Y-m-d')), 'Europe/Kyiv');
+
         return [$period, $start, $end];
     }
 

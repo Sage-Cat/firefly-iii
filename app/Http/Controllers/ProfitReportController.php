@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
+use FireflyIII\Support\Reports\AccountingPeriod;
 use FireflyIII\Support\Reports\ProfitSummary;
 use FireflyIII\Support\Reports\RefundProjection;
 use FireflyIII\Support\Reports\ReportingCurrency;
@@ -26,15 +27,27 @@ final class ProfitReportController extends Controller
             'start'    => 'nullable|required_with:end|date_format:Y-m-d|before_or_equal:end',
             'end'      => 'nullable|required_with:start|date_format:Y-m-d|before_or_equal:' . $today->format('Y-m-d')
         ]);
-        $currency     = $input['currency'] ?? 'UAH';
-        $months       = (int) ($input['months'] ?? 1);
-        $period       = ProfitSummary::period($today->format('Y-m-d'), $months);
-        $end          = Carbon::createFromFormat('!Y-m-d', $input['end'] ?? $period['end'], 'Europe/Kyiv');
-        $start        = Carbon::createFromFormat('!Y-m-d', $input['start'] ?? $period['start'], 'Europe/Kyiv');
+        $boundary = AccountingPeriod::boundary();
+        abort_if(null !== $boundary && $today->format('Y-m-d') < $boundary, 422, 'Дата початку обліку ще не настала.');
+        abort_if(null !== $boundary && isset($input['end']) && $input['end'] < $boundary, 422, 'Обраний період закінчується до початку обліку.');
+        $currency    = $input['currency'] ?? 'UAH';
+        $months      = (int) ($input['months'] ?? 1);
+        $period      = ProfitSummary::period($today->format('Y-m-d'), $months);
+        $end         = Carbon::createFromFormat('!Y-m-d', $input['end'] ?? $period['end'], 'Europe/Kyiv');
+        $start       = Carbon::createFromFormat('!Y-m-d', AccountingPeriod::start($input['start'] ?? $period['start'], $end->format('Y-m-d')), 'Europe/Kyiv');
+        $preset      = $start->format('Y-m-d') === $period['start'] && $end->format('Y-m-d') === $period['end'];
+        $granularity = null !== $boundary && $preset
+            ? match ($months) {
+                3       => 'weekly',
+                12      => 'monthly',
+                default => 'auto'
+            } : 'auto';
         $monthlyStart = $today->copy()->startOfMonth()->subMonthsNoOverflow(2);
         $monthlyEnd   = $today->copy();
         $weeklyStart  = $today->copy()->subMonthsNoOverflow(3)->addDay();
         $weeklyEnd    = $today->copy();
+        $monthlyStart = Carbon::parse(AccountingPeriod::start($monthlyStart->format('Y-m-d'), $monthlyEnd->format('Y-m-d')), 'Europe/Kyiv');
+        $weeklyStart  = Carbon::parse(AccountingPeriod::start($weeklyStart->format('Y-m-d'), $weeklyEnd->format('Y-m-d')), 'Europe/Kyiv');
         abort_if($start->diffInDays($end, true) > 3660, 422, 'Оберіть коротший період.');
         $user       = auth()->user();
         $repository = app(AccountRepositoryInterface::class);
@@ -74,7 +87,7 @@ final class ProfitReportController extends Controller
         $manualCurrencies = [];
         try {
             $quotes         = ReportingCurrency::quotes();
-            $summary        = ProfitSummary::build($journals, $quotes, $assetIds, $start->format('Y-m-d'), $end->format('Y-m-d'), $currency);
+            $summary        = ProfitSummary::build($journals, $quotes, $assetIds, $start->format('Y-m-d'), $end->format('Y-m-d'), $currency, $granularity);
             $monthlySummary = ProfitSummary::build(
                 $journals,
                 $quotes,
@@ -102,7 +115,8 @@ final class ProfitReportController extends Controller
             $error   = $exception->getMessage();
             $summary = $monthlySummary = $weeklySummary = null;
         }
-        $firstDay = $journals ? min(array_column($journals, 'day')) : null;
+        $knownDays = array_filter(array_column($journals, 'day'), static fn(string $day): bool => null === $boundary || $day >= $boundary);
+        $firstDay  = $knownDays ? min($knownDays) : null;
 
         return view('reports.profit', [
             'title'            => 'Прибуток',

@@ -31,18 +31,21 @@ final class ProfitSummary
         if ($last < $first || $first->diff($last)->days > 3660) {
             throw new InvalidArgumentException('Некоректний діапазон звіту.');
         }
-        $days   = $first->diff($last)->days;
-        $daily  = 'auto' === $granularity && $days <= 45;
-        $weekly = 'weekly' === $granularity || 'auto' === $granularity && !$daily && $days <= 92;
-        $format = $daily ? 'Y-m-d' : ($weekly ? 'o-\WW' : 'Y-m');
-        $step   = new DateInterval($daily ? 'P1D' : ($weekly ? 'P1W' : 'P1M'));
-        $owned  = array_fill_keys(array_map('strval', $assetIds), true);
-        $points = [];
-        $cursor = $daily ? $first : $first->modify($weekly ? 'monday this week' : 'first day of this month');
+        $days    = $first->diff($last)->days;
+        $bounded = null !== AccountingPeriod::boundary();
+        $start   = AccountingPeriod::start($start, $end);
+        $first   = self::day($start);
+        $daily   = 'auto' === $granularity && $days <= 45;
+        $weekly  = 'weekly' === $granularity || 'auto' === $granularity && !$daily && $days <= 92;
+        $format  = $daily ? 'Y-m-d' : ($weekly ? 'o-\WW' : 'Y-m');
+        $step    = new DateInterval($daily ? 'P1D' : ($weekly ? 'P1W' : 'P1M'));
+        $owned   = array_fill_keys(array_map('strval', $assetIds), true);
+        $points  = [];
+        $cursor  = $daily ? $first : $first->modify($weekly ? 'monday this week' : 'first day of this month');
         while ($cursor <= $last) {
             $key          = $cursor->format($format);
             $points[$key] = ['period' => $key, 'income' => '0.00', 'expenses' => '0.00', 'net' => '0.00'];
-            if ('auto' !== $granularity || $weekly) {
+            if ('auto' !== $granularity || $weekly || !$daily && $bounded) {
                 $next                  = $cursor->add($step)->sub(new DateInterval('P1D'));
                 $points[$key]['start'] = max($first, $cursor)->format('Y-m-d');
                 $points[$key]['end']   = min($last, $next)->format('Y-m-d');
@@ -130,7 +133,7 @@ final class ProfitSummary
             ? $last->sub(new DateInterval('P29D'))
             : $last->modify('first day of this month')->sub(new DateInterval('P' . ($months - 1) . 'M'));
 
-        return ['start' => $first->format('Y-m-d'), 'end' => $last->format('Y-m-d')];
+        return ['start' => AccountingPeriod::start($first->format('Y-m-d'), $last->format('Y-m-d')), 'end' => $last->format('Y-m-d')];
     }
 
     private static function day(string $value): DateTimeImmutable

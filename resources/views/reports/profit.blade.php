@@ -27,8 +27,8 @@
                         </div>
                         <div class="btn-group" role="group" aria-label="Період звіту">
                             @foreach([1 => '30 днів', 3 => '3 місяці', 12 => '1 рік'] as $number => $label)
-                                <a class="btn btn-sm {{ \FireflyIII\Support\Reports\ProfitSummary::period($valuationDay->format('Y-m-d'), $number) === ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')] ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                   @if(\FireflyIII\Support\Reports\ProfitSummary::period($valuationDay->format('Y-m-d'), $number) === ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')]) aria-current="page" @endif
+                                <a class="btn btn-sm {{ (\FireflyIII\Support\Reports\AccountingPeriod::boundary() === null || $months === $number) && \FireflyIII\Support\Reports\ProfitSummary::period($valuationDay->format('Y-m-d'), $number) === ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')] ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                   @if((\FireflyIII\Support\Reports\AccountingPeriod::boundary() === null || $months === $number) && \FireflyIII\Support\Reports\ProfitSummary::period($valuationDay->format('Y-m-d'), $number) === ['start' => $start->format('Y-m-d'), 'end' => $end->format('Y-m-d')]) aria-current="page" @endif
                                    href="{{ route('reports.profit', ['currency' => $currency, 'months' => $number]) }}">{{ $label }}</a>
                             @endforeach
                         </div>

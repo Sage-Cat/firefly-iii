@@ -52,9 +52,9 @@ final class DashboardCapital
             default => $end->copy()->subDays(29)
         };
         try {
+            $start  = Carbon::parse(AccountingPeriod::start($start->format('Y-m-d'), $end->format('Y-m-d')), 'Europe/Kyiv');
             $ledger = DashboardLedger::data();
             $result = NetWorthSeries::build($ledger['accounts'], $ledger['legs'], ReportingCurrency::quotes(), $start->format('Y-m-d'), $end->format('Y-m-d'));
-
             $result['error'] = null;
         } catch (\RuntimeException $exception) {
             $result = ['error' => $exception->getMessage(), 'points' => [], 'coverage_start' => null];
