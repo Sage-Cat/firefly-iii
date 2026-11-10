@@ -529,11 +529,17 @@ namespace {
         $custom['summary']['daily'] && $custom['start']->format('Y-m-d') === '2026-11-06',
         'An independent custom range still chooses its own resolution and later start.'
     );
+    \Illuminate\Support\Facades\Validator::swap(new \Illuminate\Validation\Factory(
+        new \Illuminate\Translation\Translator(new \Illuminate\Translation\ArrayLoader(), 'uk')
+    ));
     try {
         new ProfitReportController()->index(new ProfitRequest(['start' => '2026-10-01', 'end' => '2026-11-04']));
         throw new RuntimeException('A wholly excluded custom range was accepted.');
-    } catch (RuntimeException $exception) {
-        check($exception->getCode() === 422, 'A custom range ending before accounting coverage returns validation 422.');
+    } catch (\Illuminate\Validation\ValidationException $exception) {
+        check(
+            $exception->status === 422 && isset($exception->errors()['end']),
+            'A custom range ending before accounting coverage returns field validation 422.'
+        );
     }
     putenv('ACCOUNTING_START_DATE');
     echo 'Passed ' . $checks . " profit period checks.\n";
