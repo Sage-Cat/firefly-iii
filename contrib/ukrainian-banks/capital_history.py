@@ -1,6 +1,7 @@
 """Import dated balance valuations into account notes without ledger mutations."""
 
 import argparse
+import copy
 import fcntl
 import hashlib
 import json
@@ -12,6 +13,27 @@ from zoneinfo import ZoneInfo
 
 MARKER = re.compile(r'<!-- firefly-balance-history:v1\s*\n(.*?)\n-->', re.S)
 CURRENCY = re.compile(r'[A-Z][A-Z0-9]{2,11}\Z')
+
+
+def restrict_history(snapshots, start):
+    """Discard earlier dates, carrying their last valuation into the boundary.
+
+    A carried valuation is an opening stock, never a ledger flow. Keeping it
+    preserves all later snapshot-based balances without exposing old history.
+    """
+    boundary = date_value(start)
+    if boundary.date().isoformat() != start:
+        raise ValueError('History start requires a calendar date')
+    result = {}
+    for account, rows in snapshots.items():
+        retained = [copy.deepcopy(row) for row in rows if row['day'] >= start]
+        prior = [row for row in rows if row['day'] < start]
+        if prior and not any(row['day'] == start for row in retained):
+            opening = copy.deepcopy(max(prior, key=lambda row: row['day']))
+            opening.update(day=start, at=boundary.isoformat(), opening_valuation=True)
+            retained.insert(0, opening)
+        result[account] = sorted(retained, key=lambda row: row['day'])
+    return result
 
 
 def digest(text):
@@ -129,6 +151,8 @@ def main():
         formulas = read_json(args.state / 'formulas.json')['values']
         config = read_json(args.state / 'config.json')
         snapshots, excluded = journal(values, formulas, config['bindings'], config['today'])
+        if config.get('start_date'):
+            snapshots = restrict_history(snapshots, config['start_date'])
         accounts = client.all('/accounts?type=asset')
         changes = plan(accounts, snapshots, config['coverage'], config['source'])
         save_json(args.state / 'plan.json', {'changes': changes, 'excluded': excluded})
