@@ -60,7 +60,71 @@
             new MutationObserver(update).observe(table, {childList: true, subtree: true, characterData: true});
             update();
         };
+        const enhanceTags = () => {
+            if (route !== 'tags.index') return;
+            const form = content.querySelector('form[action]');
+            if (!form) return;
+            const items = Array.from(form.querySelectorAll('.big-line'));
+            for (const item of items) {
+                item.classList.remove('col-3');
+                item.classList.add('col-12', 'col-sm-6', 'col-xl-3');
+                for (const badge of item.querySelectorAll('a.badge')) {
+                    badge.style.maxWidth = 'calc(100% - 1.5rem)';
+                    badge.style.verticalAlign = 'middle';
+                }
+            }
+            if (!items.length || form.dataset.workspaceCards) return;
+            form.dataset.workspaceCards = 'true';
+            const tools = document.createElement('div');
+            tools.className = 'workspace-table-tools workspace-card-filter d-print-none';
+            const input = document.createElement('input');
+            input.type = 'search'; input.className = 'form-control form-control-sm';
+            input.placeholder = 'Пошук тегів на цій сторінці';
+            input.setAttribute('aria-label', 'Пошук тегів на цій сторінці');
+            const clear = document.createElement('button');
+            clear.type = 'button'; clear.className = 'btn btn-sm btn-outline-secondary'; clear.textContent = 'Очистити';
+            const status = document.createElement('span');
+            status.className = 'small text-muted'; status.setAttribute('role', 'status');
+            const update = () => {
+                const query = normalize(input.value);
+                let count = 0, selected = 0;
+                for (const item of items) {
+                    const match = !query || normalize(item.textContent).includes(query);
+                    item.classList.toggle('workspace-filtered', !match);
+                    if (match) count++;
+                    if (item.querySelector('input[type="checkbox"]:checked')) selected++;
+                }
+                status.textContent = `Показано ${count} із ${items.length} · на цій сторінці` + (selected ? ` · обрано для видалення: ${selected}` : '');
+                clear.disabled = !input.value;
+            };
+            input.addEventListener('input', update);
+            input.addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); if (event.key === 'Escape') {input.value = ''; update();} });
+            clear.addEventListener('click', () => {input.value = ''; update(); input.focus();});
+            form.addEventListener('change', update);
+            tools.append(input, clear, status); form.before(tools); update();
+        };
+        const tableRoutes = /^(budgets|subscriptions|piggy-banks|categories|tags|object-groups|rules|rule-groups|recurring|webhooks|attachments|search|transactions|accounts)\.index$/;
         const enhance = () => {
+            enhanceTags();
+            if (tableRoutes.test(route)) {
+                content.querySelectorAll('table').forEach(table => {
+                    if (!table.tBodies.length) return;
+                    const existingViewport = table.closest('.table-responsive');
+                    if (!existingViewport || existingViewport.classList.contains('workspace-table-viewport')) {
+                        for (const button of table.querySelectorAll('[data-bs-toggle="dropdown"]')) {
+                            if (!button.hasAttribute('data-bs-config')) button.setAttribute('data-bs-config', '{"popperConfig":{"strategy":"fixed"}}');
+                        }
+                    }
+                    if (existingViewport) return;
+                    const viewport = document.createElement('div');
+                    viewport.className = 'table-responsive workspace-table-viewport';
+                    viewport.tabIndex = 0;
+                    viewport.setAttribute('role', 'region');
+                    viewport.setAttribute('aria-label', 'Таблиця з горизонтальним прокручуванням');
+                    table.before(viewport);
+                    viewport.append(table);
+                });
+            }
             if (filterRoutes.test(route)) content.querySelectorAll('table').forEach(install);
         };
         enhance();
