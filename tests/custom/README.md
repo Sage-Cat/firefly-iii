@@ -236,7 +236,7 @@ ties. The complete API response and report totals remain unchanged; fewer
 available entries are shown without padding or invented aggregate bars.
 `category_chart_js.cjs` executes the native ranking and refresh hooks,
 including palettes applied after the standard colorizer and empty states.
-The readability fixture checks the paired expense-left/income-right layout
+The readability fixture checks the paired income-left/expense-right layout
 at the 768px boundary, mobile stacking, full titles and the separate account
 sidebar while retaining the existing typography and menu checks.
 
@@ -249,3 +249,23 @@ Category fills and borders stay within the orange/yellow and blue/violet hue
 bands, reserving red and green for account charts. The native test covers all
 semantic families and 1,000 unrecognized names without changing ranking,
 amounts or the account palettes.
+
+
+The homepage budget plot reuses the deterministic category-name palette.
+Each budget keeps one hue across periods; spent, remaining, budgeted and
+overspent stacks use distinct lightness levels without red or green fills
+or borders. Raw names stay aligned after zero rows are skipped.
+Only the homepage budget holder uses this palette; other plots and the
+red spent-progress bar in the budget table retain their behavior.
+
+```sh
+node tests/custom/budget_chart_colors.mjs
+node tests/custom/budget_chart_build.mjs
+```
+
+Profit chart resolution follows the selected range: daily for 30 days,
+ISO weeks for three months, monthly for a year. Boundary weeks are clipped
+to the report dates. The result line accumulates net flows from the start
+of the range; totals, conversion and independent three-month tables stay
+unchanged. The profit period tests cover calendar boundaries, empty weeks,
+refunds and accumulated results in both report currencies.
