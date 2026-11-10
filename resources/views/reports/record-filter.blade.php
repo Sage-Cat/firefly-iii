@@ -9,7 +9,7 @@
         <p class="small text-muted mb-0 mt-2 record-filter-empty" hidden>На цій сторінці збігів немає. Очисти пошук або перейди на іншу сторінку.</p>
     </div>
 </div>
-<style nonce="{{ $JS_NONCE }}">{{ $recordFilterRowSelector }}[hidden] { display: none !important; }</style>
+<style nonce="{{ $JS_NONCE }}">{{ $recordFilterRowSelector }}.record-filter-excluded { display: none !important; }</style>
 <script nonce="{{ $JS_NONCE }}">
 (() => {
     const start = () => {
@@ -22,26 +22,37 @@
         const update = () => {
             const rows = Array.from(root.querySelectorAll(@json($recordFilterRowSelector)));
             const query = normalize(input.value);
+            // Remove only this filter's marker before checking visibility controlled by Firefly.
+            for (const row of rows) row.classList.remove('record-filter-excluded');
+            const scope = rows.filter(row => !row.hidden && getComputedStyle(row).display !== 'none' && row.getClientRects().length > 0);
             let visible = 0;
-            for (const row of rows) {
-                row.hidden = query !== '' && !normalize(row.textContent).includes(query);
-                if (!row.hidden) visible++;
+            for (const row of scope) {
+                const excluded = query !== '' && !normalize(row.textContent).includes(query);
+                row.classList.toggle('record-filter-excluded', excluded);
+                if (!excluded) visible++;
             }
-            const text = `${visible} із ${rows.length} на цій сторінці`;
+            const text = `${visible} із ${scope.length} на цій сторінці`;
             if (count.textContent !== text) count.textContent = text;
-            empty.hidden = visible !== 0 || rows.length === 0;
-            input.disabled = rows.length === 0;
+            empty.hidden = visible !== 0 || scope.length === 0;
+            input.disabled = scope.length === 0 && input.value === '';
             clear.disabled = input.value === '';
+            // These synchronous mutations are ours; do not schedule another update for them.
+            observer.takeRecords();
         };
         input.addEventListener('input', update);
-        clear.addEventListener('click', () => { input.value = ''; update(); input.focus(); });
+        const reset = () => { input.value = ''; update(); input.focus(); };
+        clear.addEventListener('click', reset);
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') event.preventDefault();
+            if (event.key === 'Escape') { event.preventDefault(); reset(); }
+        });
         let scheduled = false;
         const observer = new MutationObserver(records => {
             if (records.every(record => tools.contains(record.target)) || scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => { scheduled = false; update(); });
         });
-        observer.observe(root, {childList: true, subtree: true, characterData: true});
+        observer.observe(root, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'style', 'class']});
         update();
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
