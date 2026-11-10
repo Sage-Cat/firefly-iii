@@ -1,7 +1,7 @@
-@if(!$anonymous && null !== $piggy['target_amount'] && bccomp((string) $piggy['target_amount'], '0', 2) > 0)
+@if(!$anonymous && null !== $piggy['target_amount'] && bccomp((string) $piggy['target_amount'], '0', 16) > 0)
     @php
-        $controlPiggySaved = bccomp((string) $piggy['current_amount'], '0', 2) < 0 ? '0' : (string) $piggy['current_amount'];
-        $controlPiggyPercent = bcdiv(bcmul($controlPiggySaved, '100', 2), (string) $piggy['target_amount'], 0);
+        $controlPiggySaved = bccomp((string) $piggy['current_amount'], '0', 16) < 0 ? '0' : (string) $piggy['current_amount'];
+        $controlPiggyPercent = bcdiv(bcmul($controlPiggySaved, '100', 18), (string) $piggy['target_amount'], 0);
         $controlPiggyWidth = bccomp($controlPiggyPercent, '100', 0) > 0 ? '100' : $controlPiggyPercent;
     @endphp
     <div class="small text-muted mb-1">{{ $controlPiggyPercent }}% цілі</div>

@@ -4,9 +4,9 @@
     @endif
     <div class="d-lg-none mt-2">
         @include('piggy-banks.control-progress')
-        @if(null !== $piggy['left_to_save'] && bccomp((string) $piggy['left_to_save'], '0', 2) > 0)
+        @if(null !== $piggy['left_to_save'] && bccomp((string) $piggy['left_to_save'], '0', 16) > 0)
             <div class="small mt-1">Залишилося {!! format_amount_by_symbol($piggy['left_to_save'], $piggy['currency_symbol'], $piggy['currency_decimal_places']) !!}</div>
-        @elseif(null !== $piggy['target_amount'] && bccomp((string) $piggy['target_amount'], '0', 2) > 0)
+        @elseif(null !== $piggy['target_amount'] && bccomp((string) $piggy['target_amount'], '0', 16) > 0)
             <div class="small mt-1">Цілі досягнуто</div>
         @else
             <div class="small text-muted">Ціль без визначеної суми</div>
