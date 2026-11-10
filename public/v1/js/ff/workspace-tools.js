@@ -5,7 +5,7 @@
         const content = document.querySelector('.app-content > .container-fluid');
         if (!config || !content) return;
         const route = config.dataset.route || '';
-        const filterRoutes = /^(budgets|subscriptions|piggy-banks|categories|tags|object-groups|rules|rule-groups|recurring|webhooks|attachments|search)\.index$/;
+        const filterRoutes = /^(budgets|subscriptions|bills|piggy-banks|categories|tags|object-groups|rules|rule-groups|recurring|webhooks|attachments|search)\.index$/;
         const normalize = value => String(value).normalize('NFKC').toLocaleLowerCase('uk-UA').replace(/\s+/g, ' ').trim();
         let serial = 0;
         const install = table => {
@@ -103,7 +103,7 @@
             form.addEventListener('change', update);
             tools.append(input, clear, status); form.before(tools); update();
         };
-        const tableRoutes = /^(budgets|subscriptions|piggy-banks|categories|tags|object-groups|rules|rule-groups|recurring|webhooks|attachments|search|transactions|accounts)\.index$/;
+        const tableRoutes = /^(budgets|subscriptions|bills|piggy-banks|categories|tags|object-groups|rules|rule-groups|recurring|webhooks|attachments|search|transactions|accounts)\.index$/;
         const enhance = () => {
             enhanceTags();
             if (tableRoutes.test(route)) {
