@@ -2,7 +2,7 @@ import copy
 import io
 import unittest
 
-from capital_history import apply, date_value, digest, journal, plan
+from capital_history import apply, date_value, digest, journal, plan, restrict_history
 
 
 class HistoryTests(unittest.TestCase):
@@ -23,6 +23,28 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([r['amount'] for r in rows['1']], ['1000', '1130'])
         self.assertEqual(excluded[0]['row'], 4)
         self.assertEqual(excluded[0]['reason'], 'dynamic_date')
+
+    def test_start_boundary_preserves_later_valuations_without_old_dates(self):
+        rows, _ = journal(self.rows, self.formulas, self.bindings, '2026-11-08')
+        original = copy.deepcopy(rows)
+        restricted = restrict_history(rows, '2026-02-15')
+        self.assertEqual(rows, original)
+        self.assertEqual(len(restricted['1']), 1)
+        opening = restricted['1'][0]
+        self.assertEqual((opening['day'], opening['at'], opening['amount'], opening['currency']),
+                         ('2026-02-15', '2026-02-15T00:00:00+02:00', '1130', 'USD'))
+        self.assertTrue(opening['opening_valuation'])
+        self.assertEqual(restrict_history(restricted, '2026-02-15'), restricted)
+
+    def test_boundary_keeps_exact_snapshot_and_missing_accounts_unknown(self):
+        rows, _ = journal(self.rows, self.formulas, self.bindings, '2026-11-08')
+        restricted = restrict_history(dict(rows, empty=[]), '2026-02-01')
+        self.assertEqual(restricted['1'], [rows['1'][1]])
+        self.assertEqual(restricted['empty'], [])
+        with self.assertRaises(ValueError):
+            restrict_history(rows, '2026-02-30')
+        with self.assertRaises(ValueError):
+            restrict_history(rows, '2026-02-01T12:00:00')
 
     def test_latest_intraday_and_serial_date(self):
         self.rows.insert(2, ['2026-01-01T13:00:00', 'Broker', 'EUR', 1100])
