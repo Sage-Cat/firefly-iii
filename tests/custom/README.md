@@ -273,8 +273,9 @@ refunds and accumulated results in both report currencies.
 
 ## Finance page tools
 
-Core navigation exposes asset accounts and categories directly; rules, recurring
-transactions, tags, groups, counterparties and liabilities remain under Additional.
+Accounting contains transactions and payment review; Statistics contains Profit.
+Accounts, categories, rules, recurring transactions, tags, groups, counterparties
+and liabilities are direct links under Accounting Organization.
 It changes navigation only, preserving configured rules and synchronization.
 
 Index-list search is explicitly local to the current page. Toolbars stay outside
