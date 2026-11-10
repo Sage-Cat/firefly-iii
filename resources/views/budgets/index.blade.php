@@ -237,6 +237,7 @@
                                                 <span class="bi bi-calendar-plus" title="{{ __('firefly.auto_budget_adjusted_icon') }}"></span>
                                             @endif
                                         @endif
+                                        @include('budgets.usage')
                                         @if(count($budget['attachments']) > 0)
                                             <span class="bi bi-paperclip"></span>
                                         @endif

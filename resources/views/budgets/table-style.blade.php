@@ -14,6 +14,14 @@
         margin-inline-start: auto;
     }
 
+    #budgetList > thead > tr > th:nth-child(3) {
+        padding-inline-end: 3rem;
+    }
+
+    #budgetList .budget-usage { max-width: 18rem; }
+    #budgetList .budget-usage .progress { height: 0.4rem; }
+    #budgetList .budget-usage .progress-bar { background-color: #8b7be8; }
+
     #budgetList .budget_amount {
         text-align: end;
     }
