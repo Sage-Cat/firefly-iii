@@ -1,5 +1,6 @@
 @extends('layout.v3.session')
 @section('content')
+    @include('reports.record-transactions')
 
     {{-- upper show-all instruction --}}
     @if(is_countable($periods) && count($periods) > 0)

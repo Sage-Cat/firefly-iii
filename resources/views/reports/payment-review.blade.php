@@ -76,6 +76,7 @@
                 </nav>
             </div>
         </div>
+        @include('reports.record-review')
         @if(session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif
         @forelse($payments as $payment)
             <article class="card payment-card mb-3" aria-labelledby="payment-title-{{ $payment['id'] }}">
