@@ -269,3 +269,35 @@ to the report dates. The result line accumulates net flows from the start
 of the range; totals, conversion and independent three-month tables stay
 unchanged. The profit period tests cover calendar boundaries, empty weeks,
 refunds and accumulated results in both report currencies.
+
+
+## Finance page tools
+
+Core navigation exposes asset accounts and categories directly; rules, recurring
+transactions, tags, groups, counterparties and liabilities remain under Additional.
+It changes navigation only, preserving configured rules and synchronization.
+
+Index-list search is explicitly local to the current page. Toolbars stay outside
+POST forms, Enter is cancelled, and filters use their own CSS marker instead of
+changing native visibility or selections. Responsive table regions keep native
+menus accessible, including buttons inserted later by Alpine. Tag-card search
+keeps the count of selected hidden tags visible. Long pages offer section links.
+
+Budget cards compare plan/spent/remaining for the selected period; subscriptions
+show native expected dates and a twelve-month equivalent. Savings goals use
+actual progress without a minimum fabricated width, retaining crypto precision
+and privacy. Transactions preserve selected dates when changing type. Account
+and payment-review searches keep their page scope. The NBU calculator uses exact
+decimal arithmetic through UAH, with USDT using USD; it never creates a transfer.
+Profit supplements the existing totals with daily averages and the retained share
+of income. Empty, zero-income and anonymous states are explicit.
+
+```sh
+node tests/custom/workspace_tools.mjs
+node tests/custom/record_page_tools.mjs firefly-iii-local:6.7.9
+```
+
+Research: [table tasks](https://www.nngroup.com/articles/data-tables/),
+[progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/),
+[Firefly budgets](https://github.com/firefly-iii/docs/blob/main/docs/docs/explanation/financial-concepts/budgets.md),
+[Actual reports](https://actualbudget.org/docs/tour/reports/).
