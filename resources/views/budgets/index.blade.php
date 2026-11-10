@@ -44,6 +44,7 @@
             </div>
         </div>
     </div>
+    @include('budgets.control-summary')
     <!-- available budget configurator. -->
     @if(0 === count($availableBudgets))
         <div class="row">
@@ -198,8 +199,8 @@
                                 <th class="ten">&nbsp;</th>
                                 <th>{{ __('firefly.budget') }}</th>
                                 <th class="quarter">{{ __('firefly.budgeted') }}</th>
-                                <th>{{ __('firefly.spent') }} ({{  strtolower(__('firefly.per_day')) }})</th>
-                                <th>{{ __('firefly.left') }} ({{ strtolower(__('firefly.per_day')) }})</th>
+                                <th>Витрачено (середнє за день)</th>
+                                <th>Залишок (можна на день)</th>
                                 <th class="ten">&nbsp;</th>
                             </tr>
                             </thead>

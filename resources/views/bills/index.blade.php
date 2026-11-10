@@ -3,6 +3,7 @@
     @php($subscriptionOverview = \FireflyIII\Support\Reports\SubscriptionOverview::forUser(auth()->user()))
     <div class="row g-3 align-items-start">
         <div class="col-xl-8 subscription-list-column">
+            @include('bills.control-queue')
             @if(0 === $total)
                 @php($shownDemo = true)
                 <x-empty-page :route="route('subscriptions.create')" type="bills" object-type="default" />
@@ -18,7 +19,7 @@
     @vite(['js/pages/generic.js'])
     <script src="{{ asset('v1/js/lib/jquery-ui.min.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
     <script src="{{ asset('v1/js/ff/bills/index.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
-    @if(!$subscriptionOverview['error'] && bccomp($subscriptionOverview['uah'], '0', 2) > 0)
+    @if(!$anonymous && !$subscriptionOverview['error'] && bccomp($subscriptionOverview['uah'], '0', 2) > 0)
         <script src="{{ asset('v1/js/lib/Chart.bundle.min.js') }}?v={{ $FF_BUILD_TIME }}" nonce="{{ $JS_NONCE }}"></script>
         <script src="{{ asset('v1/js/ff/charts.defaults.js') }}?v={{ substr(hash_file('sha256', public_path('v1/js/ff/charts.defaults.js')), 0, 12) }}" nonce="{{ $JS_NONCE }}" integrity="sha384-{{ base64_encode(hash_file('sha384', public_path('v1/js/ff/charts.defaults.js'), true)) }}" crossorigin="anonymous"></script>
         <script nonce="{{ $JS_NONCE }}">

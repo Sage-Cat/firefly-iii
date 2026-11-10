@@ -4,7 +4,7 @@
         <div class="col-lg-12 col-md-12 col-sm-12">
             <div class="card mb-2">
                 <x-elements.card-header-with-menu :cardTitle="$objectGroup['object_group_title']" :route="route('piggy-banks.create')" :linkTitle="__('firefly.create_new_piggy_bank')" />
-                <div class="card-body p-0">
+                <div class="card-body p-0 table-responsive">
 
 <table class="table table-valign-middle table-hover table-sm piggy-sortable">
     <thead>
@@ -38,6 +38,7 @@
         </td>
         <td>
             <a href="{{ route('piggy-banks.show', $piggy['id']) }}" title="{{ $piggy['name'] }}">{{ $piggy['name'] }}</a>
+            @include('piggy-banks.control-goal')
             @if(count($piggy['attachments']) > 0)
                 <span class="bi bi-paperclip"></span>
             @endif
@@ -58,23 +59,7 @@
         </td>
 
         <td class="d-none d-lg-table-cell piggyBar">
-            @if(null !== $piggy['percentage'])
-                <div class="progress"
-                    style="height: 21px" role="progressbar" aria-valuenow="{{ round(max(30, $piggy['percentage'])) }}" aria-valuemin="0" aria-valuemax="100">
-                    <div
-                        @if(100 === $piggy['percentage'])
-                            class="progress-bar progress-bar-striped bg-success w-{{ round(max(30, $piggy['percentage'])) }}"
-                        @elseif(0 === $piggy['percentage'])
-                            class="progress-bar progress-bar-striped bg-warning w-{{ round(max(30, $piggy['percentage'])) }}"
-                        @else
-                            class="progress-bar progress-bar-striped bg-info w-{{ round(max(30, $piggy['percentage'])) }}"
-                        @endif
-                        ></div>
-                </div>
-            @endif
-
-
-
+            @include('piggy-banks.control-progress')
         </td>
 
 
