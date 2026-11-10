@@ -82,6 +82,41 @@ export function drawSingleCurrencyChart(type, url, holder, anonymous) {
     console.error('Cannot draw a "' + type + '" chart yet :(');
 }
 
+function colorizeBudgetData(data, rawBudgetLabels) {
+    // The synchronous homepage charts.js provides this before the deferred dashboard module runs.
+    if (typeof window.ledgerCategoryColor !== "function") {
+        throw new Error("The homepage budget palette is unavailable.");
+    }
+    const palettes = rawBudgetLabels.map((label) => {
+        const color = window.ledgerCategoryColor(label).background;
+        const match = /^hsl\((\d+), (\d+)%, (\d+)%\)$/.exec(color);
+        if (
+            !match ||
+            !((+match[1] >= 25 && +match[1] <= 60) || (+match[1] >= 195 && +match[1] <= 290)) ||
+            +match[2] > 100 ||
+            +match[3] < 40 ||
+            +match[3] > 85
+        ) {
+            throw new Error("The homepage budget palette contract changed.");
+        }
+        return match.slice(1).map(Number);
+    });
+    const shades = { budgeted: 0, spent: -10, left: 12, overspent: -22 };
+    for (const dataset of data.datasets) {
+        const kind = Object.keys(shades).find((key) => dataset.label === key + dataset.currency_code);
+        if (kind === undefined) {
+            throw new Error("The homepage budget stack contract changed.");
+        }
+        dataset.backgroundColor = palettes.map(
+            ([hue, saturation, lightness]) => `hsl(${hue}, ${saturation}%, ${lightness + shades[kind]}%)`,
+        );
+        dataset.borderColor = palettes.map(
+            ([hue, saturation, lightness]) => `hsl(${hue}, ${saturation}%, ${lightness + shades[kind] - 18}%)`,
+        );
+    }
+    return data;
+}
+
 function drawMultiCurrencyStackedColumnChart(url, holder, anonymous, colorData) {
     document.getElementById(holder).classList.remove("general-chart-error");
     window.axios
@@ -106,10 +141,12 @@ function drawMultiCurrencyStackedColumnChart(url, holder, anonymous, colorData) 
             // options.plugins.tooltip.interaction.axis = 'y';
 
             let datasets = {};
+            const rawBudgetLabels = [];
             // loop all collected data.
             for (let i = 0; i < all.length; i++) {
                 if (Object.hasOwn(all, i)) {
                     let current = all[i];
+                    const rawBudgetLabel = current.label;
                     let label = current.label + " (" + current.currency_code + ")";
                     //console.log("Now processing", label);
 
@@ -133,6 +170,7 @@ function drawMultiCurrencyStackedColumnChart(url, holder, anonymous, colorData) 
 
                     // add the name as a label
                     data.labels.push(formatLabel(label, 25));
+                    rawBudgetLabels.push(rawBudgetLabel);
                     let labelIndex = data.labels.length - 1;
 
                     /*
@@ -279,6 +317,9 @@ function drawMultiCurrencyStackedColumnChart(url, holder, anonymous, colorData) 
 
             if (colorData) {
                 data = colorizeAllData(data);
+            }
+            if (holder === "budgets-chart") {
+                data = colorizeBudgetData(data, rawBudgetLabels);
             }
 
             // add a marker to the chart if defined.
