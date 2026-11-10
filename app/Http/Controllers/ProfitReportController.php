@@ -13,6 +13,7 @@ use FireflyIII\Support\Reports\ProfitSummary;
 use FireflyIII\Support\Reports\RefundProjection;
 use FireflyIII\Support\Reports\ReportingCurrency;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -28,8 +29,12 @@ final class ProfitReportController extends Controller
             'end'      => 'nullable|required_with:start|date_format:Y-m-d|before_or_equal:' . $today->format('Y-m-d')
         ]);
         $boundary = AccountingPeriod::boundary();
-        abort_if(null !== $boundary && $today->format('Y-m-d') < $boundary, 422, 'Дата початку обліку ще не настала.');
-        abort_if(null !== $boundary && isset($input['end']) && $input['end'] < $boundary, 422, 'Обраний період закінчується до початку обліку.');
+        if (null !== $boundary && $today->format('Y-m-d') < $boundary) {
+            throw ValidationException::withMessages(['start' => 'Дата початку обліку ще не настала.']);
+        }
+        if (null !== $boundary && isset($input['end']) && $input['end'] < $boundary) {
+            throw ValidationException::withMessages(['end' => 'Обраний період закінчується до початку обліку.']);
+        }
         $currency    = $input['currency'] ?? 'UAH';
         $months      = (int) ($input['months'] ?? 1);
         $period      = ProfitSummary::period($today->format('Y-m-d'), $months);
