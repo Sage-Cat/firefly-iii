@@ -151,7 +151,8 @@ $monthlyLine = ProfitSummary::build(
     ['1'],
     '2025-12-01',
     '2026-02-28',
-    'EUR'
+    'EUR',
+    'monthly'
 );
 check(
     array_column($monthlyLine['points'], 'cumulative_net') === ['100.00', '70.00', '70.00'],

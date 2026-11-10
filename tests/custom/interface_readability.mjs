@@ -56,8 +56,8 @@ function verifyViews(directory) {
 }
 verifyViews(path.join(root, 'resources/views'));
 assert.equal(legacyViews, 16);
-const order = ['categories-chart', 'expense-accounts-chart', 'revenue-accounts-chart'].map(id => native.view.indexOf(`id="${id}"`));
-assert.ok(order.every(position => position >= 0) && order[0] < order[1] && order[1] < order[2], 'Expense and income rankings must follow categories in that order');
+const order = ['categories-chart', 'revenue-accounts-chart', 'expense-accounts-chart'].map(id => native.view.indexOf(`id="${id}"`));
+assert.ok(order.every(position => position >= 0) && order[0] < order[1] && order[1] < order[2], 'Income and expense rankings must follow categories in that order');
 assert.ok(order[2] < native.view.indexOf('id="all_transactions"'), 'Both cards stay in the main chart column');
 let draw = read('node_modules/chart.js/dist/chart.umd.js') + ';window.Chart4=window.Chart;';
 const drawSource = read('resources/assets/v3/js/shared/draw-chart.js').replace(/^import[^\n]*\n/gm, '')
@@ -73,7 +73,7 @@ const typography = '<style>' + rootRules[0] + '</style>';
 native.css = native.css.replace(rootRules[0], '');
 assert.ok(!/!important|\bbody\s*\{|\bbutton\s*\{/.test(typography), 'Typography scales the root instead of overriding controls');
 const toolbar = '<div class="dashboard-chart-period d-flex flex-wrap align-items-center gap-2 mb-2"><div class="btn-group btn-group-sm"><a class="btn btn-primary">30 днів</a><a class="btn btn-outline-secondary">3 міс</a><a class="btn btn-outline-secondary">1 рік</a></div><span class="small text-muted">11.10.2026–09.11.2026 · ₴</span></div>';
-const chartNames = ['accounts-chart', 'budgets-chart', 'categories-chart', 'expense-accounts-chart', 'revenue-accounts-chart'];
+const chartNames = ['accounts-chart', 'budgets-chart', 'categories-chart', 'revenue-accounts-chart', 'expense-accounts-chart'];
 const chartColumn = native.view.slice(native.view.indexOf('    <div class="row" x-data="index">'), native.view.indexOf('<div class="col-lg-4 col-md-12 col-sm-12" id="all_transactions">'))
     .replace(/@include\('reports\.dashboard-(?:capital-note|chart-period)'[^\n]*/g, toolbar)
     .replace(/\{\{[\s\S]*?\}\}/g, expression => expression.includes('expense_accounts') ? 'Рахунки витрат'
@@ -130,11 +130,11 @@ setTimeout(()=>{const css=selector=>parseFloat(getComputedStyle(document.querySe
         assert.ok(result.page <= result.width + 1 && result.overflow.length === 0, 'Representative money UI must not overflow horizontally: ' + JSON.stringify(result));
         assert.deepEqual(result.order, chartNames);
         if (width >= 768) {
-            assert.ok(Math.abs(result.pair.expense.y - result.pair.revenue.y) < 1 && result.pair.expense.right <= result.pair.revenue.x + 1, 'Expense and revenue must share a row, in that order');
+            assert.ok(Math.abs(result.pair.expense.y - result.pair.revenue.y) < 1 && result.pair.revenue.right <= result.pair.expense.x + 1, 'Revenue and expense must share a row, in that order');
         } else {
-            assert.ok(result.pair.expense.y < result.pair.revenue.y && Math.abs(result.pair.expense.x - result.pair.revenue.x) < 1, 'Narrow screens stack expense before revenue');
+            assert.ok(result.pair.revenue.y < result.pair.expense.y && Math.abs(result.pair.expense.x - result.pair.revenue.x) < 1, 'Narrow screens stack revenue before expense');
         }
-        if (width >= 992) assert.ok(result.pair.revenue.right <= result.pair.sidebar.x + 1, 'Both ranking cards remain to the left of the account lists');
+        if (width >= 992) assert.ok(result.pair.expense.right <= result.pair.sidebar.x + 1, 'Both ranking cards remain to the left of the account lists');
         assert.ok(result.canvas.every((canvas, index) => Math.abs(canvas.height - (result.width <= 767 ? 280 : index === 0 ? 360 : 400)) <= 1 && canvas.width > 0 && canvas.width <= result.width), 'Existing desktop/mobile chart height constraints are preserved: ' + JSON.stringify(result.canvas));
     }
     for (const width of [390, 1440]) {

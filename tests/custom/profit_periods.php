@@ -136,6 +136,52 @@ namespace {
         'The annual preset must retain 12 calendar months through leap day.'
     );
 
+    foreach (['2026-01-01', '2026-11-10', '2024-02-29', '2024-03-31', '2026-08-31'] as $today) {
+        foreach ([1 => 'daily', 3 => 'weekly', 12 => 'monthly'] as $months => $granularity) {
+            $period  = ProfitSummary::period($today, $months);
+            $summary = ProfitSummary::build([], [], [], $period['start'], $period['end'], 'EUR');
+            check($summary['granularity'] === $granularity, 'Every preset must retain its day/week/month resolution at calendar boundaries.');
+            check(
+                end($summary['points'])['cumulative_net'] === $summary['totals']['net'],
+                'Empty periods retain all buckets and the final accumulated result.'
+            );
+            if (3 === $months) {
+                $explicit = ProfitSummary::build([], [], [], $period['start'], $period['end'], 'EUR', 'weekly');
+                check(
+                    $summary['points'] === $explicit['points'] && count($summary['points']) >= 9 && count($summary['points']) <= 14,
+                    'The three-month chart uses clipped ISO weeks rather than three monthly points.'
+                );
+            }
+        }
+    }
+
+    $quarterRows = [
+        row('new-year-income', '2025-12-31', '-200', 'Deposit', 'revenue', 'owned'),
+        row('sunday-spend', '2026-01-04', '-30'),
+        row('monday-spend', '2026-01-05', '-20'),
+        row('quarter-refund', '2026-01-06', '5', 'Deposit', 'merchant', 'owned') + ['category_name' => 'Повернення коштів'],
+        row('quarter-transfer', '2026-01-07', '-999', 'Transfer')
+    ];
+    foreach ([
+        'EUR' => ['income' => '200.00', 'expenses' => '45.00', 'net' => '155.00'],
+        'UAH' => ['income' => '10000.00', 'expenses' => '2250.00', 'net' => '7750.00']
+    ] as $currency => $expected) {
+        $quarter = ProfitSummary::build($quarterRows, ['UAH' => '1', 'EUR' => '50'], ['owned'], '2025-11-01', '2026-01-31', $currency);
+        $monthly = ProfitSummary::build($quarterRows, ['UAH' => '1', 'EUR' => '50'], ['owned'], '2025-11-01', '2026-01-31', $currency, 'monthly');
+        check(
+            $quarter['granularity'] === 'weekly' && $quarter['totals'] === $expected && $monthly['totals'] === $expected,
+            'Weekly aggregation preserves converted totals, excludes transfers and nets refunds.'
+        );
+        $byWeek = array_column($quarter['points'], null, 'period');
+        check(
+            $byWeek['2026-W01']['cumulative_net'] === ('EUR' === $currency ? '170.00' : '8500.00')
+            && $byWeek['2026-W02']['cumulative_net'] === $expected['net']
+            && $byWeek['2026-W03']['cumulative_net'] === $expected['net'],
+            'Income carries forward across weeks and empty weeks; subsequent expenses change only the accumulated difference.'
+        );
+        check(end($quarter['points'])['cumulative_net'] === $quarter['totals']['net'], 'The final weekly point equals the report result.');
+    }
+
     $rows = [
         row('before', '2025-12-30', '-999'),
         row('first', '2025-12-31', '-10'),
@@ -359,6 +405,17 @@ namespace {
         'One request must reuse one quote snapshot and one stable valuation day for validation and all periods.'
     );
     check($collector->types === ['Deposit', 'Withdrawal'], 'The controller must preserve the no-transfer collector types.');
+    foreach ([3 => 'weekly', 12 => 'monthly'] as $months => $granularity) {
+        $preset = new ProfitReportController()->index(new ProfitRequest(['months' => (string) $months]))->data;
+        check(
+            $preset['summary']['granularity'] === $granularity,
+            'The real controller feeds weekly and monthly chart points for the three-month and annual buttons.'
+        );
+        check(
+            $preset['weeklySummary'] === $data['weeklySummary'] && $preset['monthlySummary'] === $data['monthlySummary'],
+            'Chart grouping must leave the independent summary tables unchanged.'
+        );
+    }
     $custom = new ProfitReportController()->index(new ProfitRequest([
         'currency' => 'EUR',
         'months'   => '12',
