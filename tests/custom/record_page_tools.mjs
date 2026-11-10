@@ -51,6 +51,15 @@ try {
  change(filter,'невідомий');result.filter.push(count.textContent);clear.click();result.filter.push(count.textContent);
  const extra=document.createElement('article');extra.className='fixture-row';extra.textContent='Дохід';document.getElementById('fixture-rows').append(extra);await settle();result.filter.push(count.textContent);
  change(filter,'дохід');result.filter.push(count.textContent);extra.textContent='Зарплата';await settle();result.filter.push(count.textContent);clear.click();
+ const nativeRows=Array.from(document.querySelectorAll('.fixture-row'));
+ change(filter,'покупка');nativeRows[0].hidden=true;await settle();result.nativeCounts=[count.textContent];
+ clear.click();result.nativeCounts.push(count.textContent);result.nativeHiddenPreserved=nativeRows[0].hidden;
+ change(filter,'зарплата');nativeRows[1].style.display='none';await settle();
+ filter.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));result.nativeCounts.push(count.textContent);result.nativeStylePreserved=nativeRows[1].style.display;
+ change(filter,'невідомий');nativeRows[2].classList.add('native-hidden');await settle();clear.click();result.nativeCounts.push(count.textContent);result.nativeClassPreserved=nativeRows[2].classList.contains('native-hidden');
+ nativeRows[0].hidden=false;nativeRows[1].style.display='';nativeRows[2].classList.remove('native-hidden');await settle();
+ change(filter,'покупка');const enter=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true});filter.dispatchEvent(enter);result.enterPrevented=enter.defaultPrevented;
+ filter.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));result.escapeCleared=filter.value==='';
  for(const [value,a,b]of [['100','EUR','UAH'],['100','USD','EUR'],['100','UAH','EUR'],['0,01','UAH','EUR'],['1','USDT','UAH'],['100.125','EUR','EUR'],['999999999999999.99','EUR','UAH'],['-1','EUR','UAH'],['bad','EUR','UAH']]){change(amount,value);change(from,a);change(to,b);result.conversions.push(out.textContent);}
  result.invalid=amount.getAttribute('aria-invalid');result.page=document.documentElement.scrollWidth;result.hidden=Array.from(document.querySelectorAll('.fixture-row')).map(row=>row.hidden);
  document.body.setAttribute('data-check',JSON.stringify(result));
@@ -59,13 +68,16 @@ try {
     for (const width of [1440,390]) {
         const fixture = path.join(temporary,`fixture-${width}.html`);
         // Minimal controls CSS; production Bootstrap layout and full-page checks belong to integration QA.
-        const css = 'body{margin:16px;font:16px sans-serif}.d-flex{display:flex}.flex-wrap{flex-wrap:wrap}.gap-2{gap:.5rem}.form-control,.form-select{box-sizing:border-box;max-width:100%;padding:.5rem}.row{display:flex;flex-wrap:wrap;gap:12px}.col-md-4{flex:1 1 220px;min-width:0}.card{padding:12px}.record-filter-empty[hidden]{display:none}.d-block{display:block}';
+        const css = 'body{margin:16px;font:16px sans-serif}.d-flex{display:flex}.flex-wrap{flex-wrap:wrap}.gap-2{gap:.5rem}.form-control,.form-select{box-sizing:border-box;max-width:100%;padding:.5rem}.row{display:flex;flex-wrap:wrap;gap:12px}.col-md-4{flex:1 1 220px;min-width:0}.card{padding:12px}.record-filter-empty[hidden]{display:none}.d-block{display:block}.native-hidden{display:none}';
         fs.writeFileSync(fixture,'<!doctype html><html lang="uk"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><body>'+fragments.filter+setup+fragments.calculator+'<script>'+strip(checks)+'</script></body></html>');
         const prefix=path.join(temporary,`result-${width}`);
         execFileSync(process.execPath,[path.join(root,'tests/custom/browser_viewport.cjs'),fixture,String(width),prefix],{stdio:['ignore','pipe','pipe'],timeout:30000});
         const html=fs.readFileSync(prefix+'.html','utf8');
         const result=JSON.parse(html.match(/data-check="([^"]+)"/)[1].replaceAll('&quot;','"').replaceAll('&amp;','&'));
         assert.deepEqual(result.filter,['2 із 2 на цій сторінці','1 із 2 на цій сторінці','0 із 2 на цій сторінці','2 із 2 на цій сторінці','3 із 3 на цій сторінці','1 із 3 на цій сторінці','0 із 3 на цій сторінці']);
+        assert.deepEqual(result.nativeCounts,['1 із 2 на цій сторінці','2 із 2 на цій сторінці','1 із 1 на цій сторінці','0 із 0 на цій сторінці']);
+        assert.ok(result.nativeHiddenPreserved && result.nativeClassPreserved && result.enterPrevented && result.escapeCleared);
+        assert.equal(result.nativeStylePreserved,'none');
         assert.deepEqual(result.conversions.slice(0,7),['5 000,00 ₴','90,00 €','2,00 €','0,00 €','45,00 ₴','100,13 €','49 999 999 999 999 999,50 ₴']);
         assert.ok(result.conversions.slice(7).every(text=>text.startsWith('Введи')));
         assert.equal(result.invalid,'true');assert.deepEqual(result.hidden,[false,false,false]);assert.ok(result.page<=width+1);
