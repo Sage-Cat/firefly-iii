@@ -321,6 +321,7 @@
                 />
 
                 @yield('content')
+                @include('reports.workspace-tools')
         </div>
         </div>
     </main>
