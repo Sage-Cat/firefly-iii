@@ -18,13 +18,20 @@
     <div class="card-header"><h2 id="subscription-overview-title" class="card-title">Витрати на підписки</h2></div>
     <div class="card-body">
         <p class="text-muted small mb-3">Середня місячна вартість усіх активних підписок.</p>
-        @if($subscriptionOverview['error'])
+        @if($anonymous)
+            <p class="text-muted mb-0">Огляд витрат приховано в анонімному режимі.</p>
+        @elseif($subscriptionOverview['error'])
             <div class="alert alert-warning mb-0" role="alert">{{ $subscriptionOverview['error'] }} Підсумок не показано.</div>
         @else
             <div class="mb-3">
                 <div class="small text-muted">Разом на місяць</div>
                 <div class="fs-3 fw-semibold text-body-emphasis">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscriptionOverview['uah']) }} ₴</div>
                 <div class="fs-5 text-body-secondary">{{ \FireflyIII\Support\Reports\ProfitSummary::money($subscriptionOverview['eur']) }} €</div>
+            </div>
+            <div class="mb-3 border-top pt-3">
+                <div class="small text-muted">Еквівалент за 12 місяців</div>
+                <div class="fw-semibold">{{ \FireflyIII\Support\Reports\ProfitSummary::money(bcmul($subscriptionOverview['uah'], '12', 2)) }} ₴</div>
+                <div class="small text-muted">{{ \FireflyIII\Support\Reports\ProfitSummary::money(bcmul($subscriptionOverview['eur'], '12', 2)) }} € · за поточними тарифами</div>
             </div>
             @if(bccomp($subscriptionOverview['uah'], '0', 2) > 0)
                 <div id="subscription-cost-chart-wrap" class="mb-3"><canvas id="subscription-cost-chart" role="img" aria-label="Частка місячних витрат за кожною активною підпискою"></canvas></div>

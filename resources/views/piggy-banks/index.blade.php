@@ -1,7 +1,7 @@
 @extends('layout.v3.session')
 @section('content')
     @if(0 === count($piggyBanks))
-        <x-empty-page :route="route('piggy-banks.create')" type="piggies" object-type="default" />
+        @include('piggy-banks.control-empty')
     @endif
     @if(count($piggyBanks) > 0)
         <x-lists.piggy-banks :piggyBanks="$piggyBanks" />
@@ -11,7 +11,7 @@
                     <div class="card-header">
                         <h3 class="card-title">{{ __('firefly.account_status') }}</h3>
                     </div>
-                    <div class="card-body p-0">
+                    <div class="card-body p-0 table-responsive">
                         <table class="table table-hover table-sm" id="accountStatus">
                             <thead>
                             <tr>
