@@ -97,6 +97,23 @@ $check(
     str_contains($goal, '31.12.2026') && str_contains($goal, '75') && str_contains($goal, '₴') && str_contains($goal, '25%'),
     'Mobile goals expose the native deadline, actual progress and remaining amount.'
 );
+foreach ([
+    ['target_amount' => '0.00030000', 'current_amount' => '0.00010000', 'left_to_save' => '0.00020000', 'expected' => '33'],
+    ['target_amount' => '0.02000000', 'current_amount' => '0.01990000', 'left_to_save' => '0.00010000', 'expected' => '99']
+] as $crypto) {
+    $crypto += ['target_date' => null, 'currency_symbol' => '₮', 'currency_decimal_places' => 8];
+    $html   = $render('piggy-banks.control-goal', ['piggy' => $crypto]);
+    $check(
+        str_contains($html, 'aria-valuenow="' . $crypto['expected'] . '"') && str_contains($html, 'Залишилося') && !str_contains($html, 'Цілі досягнуто'),
+        'Eight-decimal goals retain fractional progress and their positive remaining amount.'
+    );
+    $check(
+        trim($render('piggy-banks.control-goal', ['piggy' => $crypto, 'anonymous' => true])) === '',
+        'Anonymous crypto goals disclose neither balances nor progress.'
+    );
+}
+$micro = $render('piggy-banks.control-progress', ['piggy' => ['target_amount' => '0.0000000000000100', 'current_amount' => '0.0000000000000001']]);
+$check(str_contains($micro, 'aria-valuenow="1"'), 'Progress preserves the full sixteen-decimal stored amount scale.');
 $piggyRow  = [
     'id'                      => '901',
     'name'                    => 'Моя довга мета для подорожі та відпочинку',
