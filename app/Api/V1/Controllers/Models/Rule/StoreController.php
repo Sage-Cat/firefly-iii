@@ -65,15 +65,19 @@ final class StoreController extends Controller
     public function store(StoreRequest $request): JsonResponse
     {
         if (null !== $request->header('If-Match-Learned-Group')) {
-            return \FireflyIII\Support\Reports\LearnedRuleUpdate::store($request, fn(): JsonResponse => $this->storeResponse($request));
+            return \FireflyIII\Support\Reports\LearnedRuleUpdate::store($request, fn(): JsonResponse => $this->storeResponse($request, true));
         }
 
         return $this->storeResponse($request);
     }
 
-    private function storeResponse(StoreRequest $request): JsonResponse
+    private function storeResponse(StoreRequest $request, bool $canonicalize = false): JsonResponse
     {
-        $rule    = $this->ruleRepository->store($request->getAll());
+        $rule = $this->ruleRepository->store($request->getAll());
+        if ($canonicalize) {
+            $this->ruleRepository->resetRuleOrder($rule->ruleGroup);
+            $rule->refresh();
+        }
         $manager = $this->getManager();
 
         /** @var RuleTransformer $transformer */
