@@ -4,6 +4,7 @@ No account identifiers, merchant lists or credentials belong in this module. The
 caller holds the bank lock. Native rule changes never execute rules over history.
 """
 
+import copy
 import hashlib
 import html
 import json
@@ -19,6 +20,7 @@ from monobank_sync import Deferred, read_json, save_json
 GROUP_TITLE = "Автокатегорії з підтверджених платежів"
 GROUP_DESCRIPTION = "category-learning:v1; Змінені вручну правила зберігаються."
 MANIFEST = "learned-rules.json"
+NATIVE_TRIGGER_TYPES = ["transaction_type", "description_is", "has_no_category"]
 
 
 def _hash(value):
@@ -168,7 +170,12 @@ def _valid_rule(row, payload):
         if value != payload[field] or type(shape[field]) is not type(payload[field]):
             raise Deferred("Native learned rule read-back differs")
     for name in ("triggers", "actions"):
-        expected = [dict(item, order=index + 1, **({"prohibited": False} if name == "triggers" else {}))
+        orders = list(range(1, len(payload[name]) + 1))
+        if (name == "triggers" and [item["type"] for item in payload[name]] == NATIVE_TRIGGER_TYPES
+                and [item["order"] for item in shape[name]] == [1, 3, 4]):
+            # Native group reset includes the hidden user_action trigger at slot 2.
+            orders = [1, 3, 4]
+        expected = [dict(item, order=orders[index], **({"prohibited": False} if name == "triggers" else {}))
                     for index, item in enumerate(payload[name])]
         if shape[name] != expected:
             raise Deferred("Native learned rule conditions or action differ")
@@ -178,6 +185,82 @@ def _valid_rule(row, payload):
 def _group_shape(row):
     attributes = row.get("attributes", {})
     return {key: attributes.get(key) for key in ("title", "description", "active", "order")}
+
+
+def group_fingerprint(group, rules):
+    """Match the conditional native-create snapshot without normalizing rule shapes."""
+    group_id = str(group["id"])
+    members = [{"id": str(row["id"]), "shape": _rule_shape(row["attributes"])} for row in rules.values()
+               if str(row["attributes"].get("rule_group_id")) == group_id]
+    members.sort(key=lambda item: int(item["id"]))
+    return _hash({"group": _group_shape(group), "rules": members})
+
+
+def _creation_owned(state, group, rules):
+    """Native store resets every member: any unowned or edited member blocks creation."""
+    if _hash(_group_shape(group)) != state["group"]["fingerprint"]:
+        return False
+    records = {str(record["id"]): record for record in state["rules"].values()}
+    for identifier, row in rules.items():
+        if str(row["attributes"].get("rule_group_id")) != str(group["id"]):
+            continue
+        record = records.get(identifier)
+        if (record is None or record.get("status") not in {"active", "pending", "activating", "disabled"}
+                or _hash(_rule_shape(row["attributes"])) != record["fingerprint"]):
+            return False
+    return True
+
+
+def _order_evidence(state, rules, group_id):
+    evidence = {}
+    for record in state["rules"].values():
+        identifier = str(record["id"])
+        row = rules.get(identifier)
+        if row is None or record.get("status") == "owner_changed" or str(row["attributes"].get("rule_group_id")) != group_id:
+            continue
+        shape = _rule_shape(row["attributes"])
+        if ([item["type"] for item in shape["triggers"]] == NATIVE_TRIGGER_TYPES
+                and [item["order"] for item in shape["triggers"]] == [1, 2, 3]
+                and _hash(shape) == record["fingerprint"]):
+            evidence[identifier] = record["fingerprint"]
+    return evidence
+
+
+def _native_order_checkpoint(state, path, intent, rules):
+    """Only a proven own creation may rebase its exact hidden-trigger order side effect."""
+    if intent.get("order_checkpoint_done"):
+        return 0, set()
+    if intent.get("post_attempted") is not True:
+        raise Deferred("Native order checkpoint has no durable creation attempt")
+    evidence = intent.get("order_checkpoint", {})
+    members = intent.get("member_checkpoint", evidence)
+    records = {str(record["id"]): (key, record) for key, record in state["rules"].items()}
+    changed, blocked = 0, set()
+    for identifier, before_hash in members.items():
+        entry, row = records.get(identifier), rules.get(identifier)
+        if entry is None:
+            continue
+        key, record = entry
+        if record.get("status") == "owner_changed" or record["fingerprint"] != before_hash:
+            continue
+        shape = _rule_shape(row["attributes"]) if row else None
+        if shape is not None and _hash(shape) == before_hash:
+            continue
+        if (shape is not None and evidence.get(identifier) == before_hash
+                and [item["type"] for item in shape["triggers"]] == NATIVE_TRIGGER_TYPES
+                and [item["order"] for item in shape["triggers"]] == [1, 3, 4]):
+            previous = copy.deepcopy(shape)
+            for index, trigger in enumerate(previous["triggers"]):
+                trigger["order"] = index + 1
+            if _hash(previous) == before_hash:
+                record["fingerprint"] = _hash(shape)
+                changed += 1
+                continue
+        record["status"] = "owner_changed"
+        blocked.add(key)
+    intent["order_checkpoint_done"] = True
+    save_json(path, state)
+    return changed, blocked
 
 
 def _set_active(client, actual, active):
@@ -213,7 +296,7 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
         raise Deferred("Invalid learned category manifest")
     desired = {item["key"]: item for item in learned["candidates"]}
     result = {"created": 0, "adopted": 0, "activated": 0, "disabled": 0, "owner_changed": 0,
-              "conflicts": learned["conflicts"], "excluded": learned["excluded"], "matchers": []}
+              "conflicts": learned["conflicts"], "excluded": learned["excluded"], "native_reordered": 0, "matchers": []}
     if dry_run:
         return dict(result, candidates=len(desired))
     groups = {str(row["id"]): row for row in client.all("/rule-groups")}
@@ -272,6 +355,22 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
         result["activated"] += 1
         return changed
 
+    from bank_classification import normalized
+    for key, intent in state["intents"].items():
+        candidate = desired.get(key)
+        if (intent.get("status") != "pending" or intent.get("order_checkpoint_done")
+                or intent.get("post_attempted") is not True or not candidate_matches(intent, candidate)):
+            continue
+        payload = intent["payload"]
+        if payload != dict(rule_payload(candidate, group_id, payload.get("title")), active=False, order=payload.get("order")):
+            raise Deferred("Invalid learned rule creation intent")
+        found = [row for row in rules.values() if normalized(row["attributes"].get("title")) == normalized(payload["title"])]
+        if len(found) == 1:
+            _valid_rule(found[0], payload)
+            reordered, blocked = _native_order_checkpoint(state, path, intent, rules)
+            result["native_reordered"] += reordered
+            result["owner_changed"] += len(blocked)
+
     for key, record in list(state["rules"].items()):
         if not isinstance(record, dict) or not str(record.get("id", "")).isdigit() or not isinstance(record.get("fingerprint"), str):
             raise Deferred("Invalid managed category rule record")
@@ -315,7 +414,6 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
             _valid_rule(actual, dict(record["payload"], active=True))
             result["matchers"].append(candidate)
 
-    from bank_classification import normalized
     for key, candidate in desired.items():
         if key in state["rules"]:
             continue
@@ -336,7 +434,7 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
                     result["owner_changed"] += 1
                     continue
             payload["order"] = sum(str(row["attributes"].get("rule_group_id")) == group_id for row in rules.values()) + 1
-            intent = {"payload": payload, "category_id": candidate["category_id"], "category": candidate["category"], "status": "pending"}
+            intent = {"payload": payload, "category_id": candidate["category_id"], "category": candidate["category"], "status": "pending", "post_attempted": False}
             state["intents"][key] = intent
             save_json(path, state)
         if not candidate_matches(intent, candidate):
@@ -348,10 +446,35 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
             raise Deferred("Invalid learned rule creation intent")
         found = [row for row in rules.values() if normalized(row["attributes"].get("title")) == normalized(payload["title"])]
         if not found:
-            created = client.request("POST", "/rules", payload)["data"]
+            current_group = client.request("GET", "/rule-groups/" + group_id)["data"]
+            current_rules = {str(row["id"]): row for row in client.all("/rules")}
+            if not _creation_owned(state, current_group, current_rules):
+                result["owner_changed"] += 1
+                continue
+            if intent.get("post_attempted") is not True:
+                payload["order"] = sum(str(row["attributes"].get("rule_group_id")) == group_id for row in current_rules.values()) + 1
+            intent["post_attempted"] = True
+            intent["order_checkpoint"] = _order_evidence(state, current_rules, group_id)
+            intent["member_checkpoint"] = {str(record["id"]): record["fingerprint"] for record in state["rules"].values()
+                                           if str(record["id"]) in current_rules and str(current_rules[str(record["id"])]["attributes"].get("rule_group_id")) == group_id}
+            intent["order_checkpoint_done"] = False
+            save_json(path, state)
+            try:
+                created = client.request("POST", "/rules", payload,
+                                         rule_group_hash=group_fingerprint(current_group, current_rules))["data"]
+            except RuntimeError as error:
+                if "HTTP 409:" not in str(error):
+                    raise
+                intent["post_attempted"] = False
+                save_json(path, state)
+                result["owner_changed"] += 1
+                continue
             found = [created]
             result["created"] += 1
         else:
+            if intent.get("post_attempted") is not True:
+                block(intent)
+                continue
             result["adopted"] += 1
         if len(found) != 1:
             block(intent)
@@ -359,6 +482,12 @@ def synchronize_rules(client, state_dir, learned, dry_run=False):
         identifier = str(found[0]["id"])
         actual = client.request("GET", "/rules/" + identifier)["data"]
         fingerprint = _valid_rule(actual, payload)
+        if not intent.get("order_checkpoint_done"):
+            rules = {str(row["id"]): row for row in client.all("/rules")}
+            reordered, blocked = _native_order_checkpoint(state, path, intent, rules)
+            result["native_reordered"] += reordered
+            result["owner_changed"] += len(blocked)
+            result["matchers"] = [matcher for matcher in result["matchers"] if matcher["key"] not in blocked]
         record = {"id": identifier, "fingerprint": fingerprint, "status": "pending", "payload": payload,
                   "category_id": candidate["category_id"], "category": candidate["category"]}
         state["rules"][key] = record
