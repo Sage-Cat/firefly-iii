@@ -9,6 +9,12 @@ These tools are covered by the repository's GNU Affero General Public
 License, version 3 or later; see [LICENSE](../../LICENSE) and
 [COPYING](../../COPYING).
 
+Budget configuration may include `excluded_categories`, a list of exact
+category names to keep outside managed budgets. Synchronization removes stale
+managed assignments for these categories while preserving the transactions,
+financial fields and budgets outside the managed list. This exclusion takes
+precedence over automatic category, subscription and per-payment mappings.
+
 The bank clients make read-only requests. Applying an import or budget plan
 writes to Firefly III. The Firefly client deliberately accepts only the local
 API at `http://127.0.0.1:8080/api/v1` and refuses redirects and proxy settings.
