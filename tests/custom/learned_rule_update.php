@@ -275,7 +275,9 @@ verify(learnedGroupShape() === $beforeRollback, 'A failed native callback rolls 
 $storeSource = file_get_contents((getenv('FIREFLY_TEST_APP_ROOT') ?: '/var/www/html') . '/app/Api/V1/Controllers/Models/Rule/StoreController.php');
 if (str_contains($storeSource, 'LearnedRuleUpdate::store')) {
     verify(
-        str_contains($storeSource, 'fn (): JsonResponse => $this->storeResponse($request)'),
+        str_contains($storeSource, '$this->storeResponse($request, true)')
+        && str_contains($storeSource, '$this->ruleRepository->resetRuleOrder($rule->ruleGroup)')
+        && str_contains($storeSource, '$rule->refresh()'),
         'Actual native controller delegates creation and serialization to the conditional transaction.'
     );
 }
