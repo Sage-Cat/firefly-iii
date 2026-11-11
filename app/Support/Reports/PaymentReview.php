@@ -62,6 +62,11 @@ final class PaymentReview
             ->all();
     }
 
+    public static function counts($user): array
+    {
+        return self::queue($user)['counts'];
+    }
+
     /** Only already scoped category/account maps may be passed to this decision builder. */
     public static function decide(array $review, string $action, null|string $categoryId, null|string $accountId, array $categories, array $accounts): array
     {
@@ -113,31 +118,13 @@ final class PaymentReview
 
     public static function page($user, int $page, string $filter): array
     {
-        $accounts   = self::accounts($user);
         $categories = self::categories($user);
-        $candidates = self::query($user)
-            ->where(static function ($query): void {
-                $query
-                    ->where(static fn($ordinary) => $ordinary->whereHas('transactionType', static fn($type) => $type->whereIn('type', [
-                        'Withdrawal',
-                        'Deposit'
-                    ]))->whereDoesntHave('categories', static fn($category) => $category->where('name', '!=', self::LEGACY_CATEGORY)))
-                    ->orWhere(static fn($fallback) => $fallback->whereHas('categories', static fn($category) => $category->where(
-                        'name',
-                        self::DEFAULT_CATEGORY
-                    ))->whereHas('tags', static fn($tag) => $tag->where('tag', self::DEFAULT_MARKER)))
-                    ->orWhereHas('notes', static fn($note) => $note->where('text', 'like', '%"bank_review"%'));
-            })
-            ->orderByDesc('date')
-            ->orderByDesc('id')
-            ->get();
-        $rows = $candidates
-            ->map(static fn($journal): array => self::row($journal, $accounts))
-            ->filter(static fn(array $row): bool => $row['eligible'])
-            ->values();
-        $counts = ['all' => $rows->count(), 'category' => $rows->where('pending', false)->count(), 'transfer' => $rows->where('pending', true)->count()];
+        $queue      = self::queue($user);
+        $accounts   = $queue['accounts'];
+        $rows       = $queue['journals'];
+        $counts     = $queue['counts'];
         if ('all' !== $filter) {
-            $rows = $rows->where('pending', 'transfer' === $filter)->values();
+            $rows = $rows->filter(static fn($journal): bool => $queue['pending'][(string) $journal->id] === ('transfer' === $filter))->values();
         }
         $history = self::query($user)
             ->whereHas('categories', static fn($category) => $category->where('name', '!=', self::LEGACY_CATEGORY))
@@ -147,15 +134,15 @@ final class PaymentReview
             ->get()
             ->map(static fn($journal): array => self::row($journal, $accounts))
             ->all();
+        $selected = $rows->forPage($page, 20)->values();
+        $selected->loadMissing(['transactionGroup', 'transactionCurrency', 'transactions.account', 'transactionJournalMeta']);
         $paginator = new LengthAwarePaginator(
-            $rows
-                ->forPage($page, 20)
-                ->map(static function (array $row) use ($history, $categories): array {
-                    $row['recommendations'] = self::recommendations($row, $history, $categories);
+            $selected->map(static function ($journal) use ($history, $categories, $accounts): array {
+                $row                    = self::row($journal, $accounts);
+                $row['recommendations'] = self::recommendations($row, $history, $categories);
 
-                    return $row;
-                })
-                ->values(),
+                return $row;
+            })->values(),
             $rows->count(),
             20,
             $page,
@@ -255,60 +242,19 @@ final class PaymentReview
 
     public static function row($journal, array $accounts): array
     {
-        $review       = null;
-        $reviewNoteId = null;
-        $mcc          = null;
-        $reviewError  = null;
-        foreach ($journal->notes as $note) {
-            $mcc       ??= self::decodeNote($note->text)['mcc'] ?? null;
-            $candidate = self::review($note->text);
-            if (null === $candidate && str_contains($note->text, '"bank_review"')) {
-                $reviewError = 'Не вдалося прочитати дані уточнення. Перевір нотатку платежу.';
-            }
-            if (null !== $candidate) {
-                if (null !== $review) {
-                    $reviewError = 'Для платежу знайдено кілька записів уточнення. Потрібна звірка нотаток.';
-                }
-                $review       = $candidate;
-                $reviewNoteId = (string) $note->id;
-            }
-        }
-        $pending     = null !== $review && in_array($review['status'], ['pending', 'decided'], true);
-        $type        = $journal->transactionType->type;
-        $provisional = $journal->categories->count() === 1
-        && self::DEFAULT_CATEGORY === $journal->categories->first()->name
-        && $journal->tags->contains(
-            static fn($tag): bool => self::DEFAULT_MARKER === $tag->tag && (string) $tag->user_group_id === (string) $journal->user_group_id
-        );
-        $realCategories = $journal->categories->filter(static fn($category): bool => self::LEGACY_CATEGORY !== $category->name);
-        $eligible       = $pending || in_array($type, ['Withdrawal', 'Deposit'], true) && ($realCategories->isEmpty() || $provisional);
-        $leg            = $journal->transactions->first(static fn($leg): bool => $pending
-            ? (string) $leg->account_id === (string) $review['account_id']
-            : isset($accounts[(string) $leg->account_id])
-                && !$accounts[(string) $leg->account_id]['suspense']
-                && (
-                    'Transfer' === $type
-                    || ('Withdrawal' === $type ? bccomp((string) $leg->amount, '0', 16) < 0 : bccomp((string) $leg->amount, '0', 16) > 0)
-                ));
-        $other = null === $leg ? null : $journal->transactions->first(static fn($other): bool => (string) $other->account_id !== (string) $leg->account_id);
-        if (
-            $pending
-            && (
-                null === $leg
-                || !isset($accounts[(string) $leg->account_id])
-                || $accounts[(string) $leg->account_id]['suspense']
-                || 'Transfer' !== $type
-                || $accounts[(string) $leg->account_id]['currency'] !== $review['currency']
-                || null === $other
-                || !($accounts[(string) $other->account_id]['suspense'] ?? false)
-                || ('out' === $review['direction'] ? bccomp((string) $leg->amount, '0', 16) >= 0 : bccomp((string) $leg->amount, '0', 16) <= 0)
-            )
-        ) {
-            $reviewError = 'Рух на уточненні не відповідає банківському рахунку. Потрібна звірка.';
-        }
-        if ($pending && 'same_asset_cards' === ($review['account_scope'] ?? null)) {
-            $reviewError = 'Це переказ між картками, об’єднаними в один рахунок. Для звірки потрібна оновлена виписка картки, з якої надійшли кошти.';
-        }
+        [
+            'review'         => $review,
+            'reviewNoteId'   => $reviewNoteId,
+            'mcc'            => $mcc,
+            'reviewError'    => $reviewError,
+            'pending'        => $pending,
+            'type'           => $type,
+            'provisional'    => $provisional,
+            'realCategories' => $realCategories,
+            'leg'            => $leg,
+            'other'          => $other,
+            'eligible'       => $eligible
+        ] = self::eligibility($journal, $accounts);
         $value  = null === $leg ? '0' : (string) $leg->amount;
         $amount = str_starts_with($value, '-') ? substr($value, 1) : $value;
         $state  = self::state($journal);
@@ -316,7 +262,7 @@ final class PaymentReview
         return [
             'id'               => (string) $journal->id,
             'group_id'         => (string) $journal->transaction_group_id,
-            'eligible'         => null !== $reviewError || $eligible && null !== $leg,
+            'eligible'         => $eligible,
             'pending'          => $pending,
             'category_pending' => $provisional,
             'review'           => $review,
@@ -437,6 +383,68 @@ final class PaymentReview
         ];
     }
 
+    private static function eligibility($journal, array $accounts): array
+    {
+        $review       = null;
+        $reviewNoteId = null;
+        $mcc          = null;
+        $reviewError  = null;
+        foreach ($journal->notes as $note) {
+            $mcc       ??= self::decodeNote($note->text)['mcc'] ?? null;
+            $candidate = self::review($note->text);
+            if (null === $candidate && str_contains($note->text, '"bank_review"')) {
+                $reviewError = 'Не вдалося прочитати дані уточнення. Перевір нотатку платежу.';
+            }
+            if (null !== $candidate) {
+                if (null !== $review) {
+                    $reviewError = 'Для платежу знайдено кілька записів уточнення. Потрібна звірка нотаток.';
+                }
+                $review       = $candidate;
+                $reviewNoteId = (string) $note->id;
+            }
+        }
+        $pending     = null !== $review && in_array($review['status'], ['pending', 'decided'], true);
+        $type        = $journal->transactionType->type;
+        $provisional = $journal->categories->count() === 1
+        && self::DEFAULT_CATEGORY === $journal->categories->first()->name
+        && $journal->tags->contains(
+            static fn($tag): bool => self::DEFAULT_MARKER === $tag->tag && (string) $tag->user_group_id === (string) $journal->user_group_id
+        );
+        $realCategories = $journal->categories->filter(static fn($category): bool => self::LEGACY_CATEGORY !== $category->name);
+        $eligible       = $pending || in_array($type, ['Withdrawal', 'Deposit'], true) && ($realCategories->isEmpty() || $provisional);
+        $leg            = $journal->transactions->first(static fn($leg): bool => $pending
+            ? (string) $leg->account_id === (string) $review['account_id']
+            : isset($accounts[(string) $leg->account_id])
+                && !$accounts[(string) $leg->account_id]['suspense']
+                && (
+                    'Transfer' === $type
+                    || ('Withdrawal' === $type ? bccomp((string) $leg->amount, '0', 16) < 0 : bccomp((string) $leg->amount, '0', 16) > 0)
+                ));
+        $other = null === $leg ? null : $journal->transactions->first(static fn($other): bool => (string) $other->account_id !== (string) $leg->account_id);
+        if (
+            $pending
+            && (
+                null === $leg
+                || !isset($accounts[(string) $leg->account_id])
+                || $accounts[(string) $leg->account_id]['suspense']
+                || 'Transfer' !== $type
+                || $accounts[(string) $leg->account_id]['currency'] !== $review['currency']
+                || null === $other
+                || !($accounts[(string) $other->account_id]['suspense'] ?? false)
+                || ('out' === $review['direction'] ? bccomp((string) $leg->amount, '0', 16) >= 0 : bccomp((string) $leg->amount, '0', 16) <= 0)
+            )
+        ) {
+            $reviewError = 'Рух на уточненні не відповідає банківському рахунку. Потрібна звірка.';
+        }
+        if ($pending && 'same_asset_cards' === ($review['account_scope'] ?? null)) {
+            $reviewError = 'Це переказ між картками, об’єднаними в один рахунок. Для звірки потрібна оновлена виписка картки, з якої надійшли кошти.';
+        }
+        return (
+            compact('review', 'reviewNoteId', 'mcc', 'reviewError', 'pending', 'type', 'provisional', 'realCategories', 'leg', 'other')
+            + ['eligible' => null !== $reviewError || $eligible && null !== $leg]
+        );
+    }
+
     private static function query($user)
     {
         return TransactionJournal::query()
@@ -452,5 +460,48 @@ final class PaymentReview
                 'transactions.account',
                 'transactionJournalMeta'
             ]);
+    }
+
+    /** Candidate eligibility is shared with page rows; only this request retains its snapshot. */
+    private static function queue($user): array
+    {
+        $key = 'payment-review-queue:' . (string) ($user->id ?? '') . ':' . (string) $user->user_group_id;
+        if (request()->attributes->has($key)) {
+            return request()->attributes->get($key);
+        }
+        $accounts   = self::accounts($user);
+        $candidates = self::query($user)
+            ->setEagerLoads([])
+            ->with(['categories', 'tags', 'notes', 'transactionType', 'transactions'])
+            ->where(static function ($query): void {
+                $query
+                    ->where(static fn($ordinary) => $ordinary->whereHas('transactionType', static fn($type) => $type->whereIn('type', [
+                        'Withdrawal',
+                        'Deposit'
+                    ]))->whereDoesntHave('categories', static fn($category) => $category->where('name', '!=', self::LEGACY_CATEGORY)))
+                    ->orWhere(static fn($fallback) => $fallback->whereHas('categories', static fn($category) => $category->where(
+                        'name',
+                        self::DEFAULT_CATEGORY
+                    ))->whereHas('tags', static fn($tag) => $tag->where('tag', self::DEFAULT_MARKER)))
+                    ->orWhereHas('notes', static fn($note) => $note->where('text', 'like', '%"bank_review"%'));
+            })
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->get();
+        $pending  = [];
+        $journals = $candidates->filter(static function ($journal) use ($accounts, &$pending): bool {
+            $state = self::eligibility($journal, $accounts);
+            if ($state['eligible']) {
+                $pending[(string) $journal->id] = $state['pending'];
+            }
+
+            return $state['eligible'];
+        })->values();
+        $transfers = count(array_filter($pending));
+        $counts    = ['all' => $journals->count(), 'category' => $journals->count() - $transfers, 'transfer' => $transfers];
+        $snapshot  = compact('accounts', 'journals', 'pending', 'counts');
+        request()->attributes->set($key, $snapshot);
+
+        return $snapshot;
     }
 }
