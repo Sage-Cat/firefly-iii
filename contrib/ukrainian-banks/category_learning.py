@@ -42,12 +42,17 @@ def description_reason(value):
         return "person_or_sole_trader"
     if re.match(r"(?:магазин|дія|на картку|переказ|поповнення|платіж|оплата|картка|на карту|card|p2p|visa direct|transfer|payment|fuib moneytransfer)(?:\b|[.*_])", text):
         return "generic_description"
-    if re.fullmatch(r"[A-Za-zА-Яа-яІЇЄҐіїєґ’-]+[ ,]+[A-ZА-ЯІЇЄҐ. ]{1,8}", value):
+    service_prefixes = {"парковка", "аптека", "купон", "кафе", "ресторан", "готель", "бар", "салон", "маркет",
+                        "сервіс", "шиномонтаж", "доставка", "клініка", "банк", "головне", "управління", "товариство",
+                        "державна", "державне", "державний", "комунальне"}
+    if text.split()[0].rstrip(",.:") in service_prefixes:
+        return None
+    if re.fullmatch(r"[A-Za-zА-Яа-яІЇЄҐіїєґ’-]+[ ,]+(?=[A-ZА-ЯІЇЄҐ. ]*\.)[A-ZА-ЯІЇЄҐ. ]{1,8}", value):
         return "person_or_sole_trader"
     if re.fullmatch(r"[A-Za-zА-Яа-яІЇЄҐіїєґ’-]+(?:[A-ZА-ЯІЇЄҐ]{1,3}\.)+[A-ZА-ЯІЇЄҐ]\.?", value):
         return "person_or_sole_trader"
     words = value.split()
-    if 2 <= len(words) <= 4 and all(re.fullmatch(r"[А-ЯІЇЄҐ][а-яіїєґ’-]+|[А-ЯІЇЄҐ]+|[А-ЯІЇЄҐ]\.", word) for word in words):
+    if len(words) == 3 and all(re.fullmatch(r"[А-ЯІЇЄҐ][а-яіїєґ’-]+|[А-ЯІЇЄҐ]{2,}", word) for word in words):
         return "person_or_sole_trader"
     return None
 
