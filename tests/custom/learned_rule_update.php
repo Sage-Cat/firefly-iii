@@ -178,3 +178,105 @@ if (getenv('RULE_HASH_FIXTURE')) {
     file_put_contents(getenv('RULE_HASH_FIXTURE'), json_encode(['shape' => $shape, 'hash' => LearnedRuleUpdate::fingerprint($shape)], JSON_UNESCAPED_UNICODE));
 }
 echo 'Passed ' . ($checks - $start) . " atomic learned rule API checks.\n";
+$createStart = $checks;
+function learnedGroupShape(): array
+{
+    $group = RuleGroup::findOrFail(1);
+    $rules = Rule::query()
+        ->where('rule_group_id', 1)
+        ->orderBy('id')
+        ->get()
+        ->map(static fn($r) => ruleLoaded($r->id));
+    return LearnedRuleUpdate::groupShape($group, $rules);
+}
+
+function learnedStoreRequest(string $hash, array $extra = []): Request
+{
+    $r = Request::create('/api/v1/rules', 'POST', array_replace([
+        'rule_group_id' => '1',
+        'active'        => false,
+        'description'   => '{"firefly_learned_category":1}'
+    ], $extra));
+    $r->headers->set('If-Match-Learned-Group', $hash);
+    return $r;
+}
+
+$called = 0;
+$store  = static function () use (&$called): \Illuminate\Http\JsonResponse {
+    ++$called;
+    verify(DB::transactionLevel() > 0, 'Native creation and serialization execute within the locked transaction.');
+    return response()->json(['data' => ['id' => '3']]);
+};
+$hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 200 && $called === 1,
+    'Exact full native group permits one inactive creation.'
+);
+foreach (['title', 'description', 'active', 'order'] as $field) {
+    $hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+    $old  = DB::table('rule_groups')->where('id', 1)->value($field);
+    DB::table('rule_groups')
+        ->where('id', 1)
+        ->update([$field => 'active' === $field ? 0 : ('order' === $field ? (int) $old + 1 : 'Owner group edit')]);
+    verify(
+        LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 409 && $called === 1,
+        'A concurrent group field edit rejects creation before native reorder: ' . $field
+    );
+    DB::table('rule_groups')->where('id', 1)->update([$field => $old]);
+}
+$hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+DB::table('rules')->where('id', 1)->update(['title' => 'New owner title']);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 409 && $called === 1,
+    'Concurrent member edits reject creation before any reorder.'
+);
+$hash  = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+$added = ruleFixture(3);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 409 && $called === 1,
+    'An added owner rule invalidates the complete group membership.'
+);
+$hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+DB::table('rule_triggers')->where('rule_id', 3)->where('trigger_type', 'description_is')->update(['order' => 7]);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 409 && $called === 1,
+    'A newer condition order cannot be reset by conditional creation.'
+);
+$hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+DB::table('rule_actions')->where('rule_id', 3)->update(['action_value' => 'Owner action']);
+verify(LearnedRuleUpdate::store(learnedStoreRequest($hash), $store)->getStatusCode() === 409 && $called === 1, 'A newer action invalidates group creation.');
+$hash = LearnedRuleUpdate::fingerprint(learnedGroupShape());
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash, ['active' => true]), $store)->getStatusCode() === 422 && $called === 1,
+    'Conditional create cannot bypass inactive ownership registration.'
+);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash, ['rule_group_title' => 'Other group']), $store)->getStatusCode() === 422 && $called === 1,
+    'An alternative native group selector cannot bypass the locked group.'
+);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest('bad'), $store)->getStatusCode() === 422 && $called === 1,
+    'Malformed group hashes fail without native writes.'
+);
+verify(
+    LearnedRuleUpdate::store(learnedStoreRequest($hash, ['rule_group_id' => '2']), $store)->getStatusCode() === 404 && $called === 1,
+    'A foreign group remains inaccessible.'
+);
+$beforeRollback = learnedGroupShape();
+try {
+    LearnedRuleUpdate::store(learnedStoreRequest($hash), static function (): \Illuminate\Http\JsonResponse {
+        DB::table('rules')->where('id', 1)->update(['title' => 'Temporary failure']);
+        throw new RuntimeException('Synthetic store failure');
+    });
+} catch (RuntimeException $error) {
+    verify($error->getMessage() === 'Synthetic store failure', 'Native creation errors propagate.');
+}
+verify(learnedGroupShape() === $beforeRollback, 'A failed native callback rolls back group changes.');
+$storeSource = file_get_contents((getenv('FIREFLY_TEST_APP_ROOT') ?: '/var/www/html') . '/app/Api/V1/Controllers/Models/Rule/StoreController.php');
+if (str_contains($storeSource, 'LearnedRuleUpdate::store')) {
+    verify(
+        str_contains($storeSource, 'fn (): JsonResponse => $this->storeResponse($request)'),
+        'Actual native controller delegates creation and serialization to the conditional transaction.'
+    );
+}
+echo 'Passed ' . ($checks - $createStart) . " atomic learned group creation checks.\n";
