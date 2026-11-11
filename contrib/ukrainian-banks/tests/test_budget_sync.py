@@ -144,5 +144,46 @@ class BudgetTests(unittest.TestCase):
             self.assertEqual(1,synchronize(client,cfg,state,date(2027,1,2))['limits_created'])
         self.assertEqual([('2026-10-01','2026-12-31'),('2027-01-01','2027-03-31')],[(x['start'],x['end']) for x in client.calls])
 
+    def test_category_exclusion_precedes_overrides_and_other_mappings(self):
+        cfg=config();cfg['excluded_categories']=['Електроніка'];cfg['category_buckets']['Електроніка']='food'
+        cfg['bucket_overrides']={'1':'food'}
+        for extra in ({},{'source_id':'3'},{'description':'Example subscription'}):
+            self.assertIsNone(bucket_for(journal('1',category_name='Електроніка',**extra),cfg))
+        self.assertEqual({},spending_statistics([group(journal('1',category_name='Електроніка'))],[],cfg))
+        self.assertEqual('food',bucket_for(journal('2'),cfg))
+
+    def test_excluded_category_clears_only_managed_budgets_and_repeats_without_writes(self):
+        cfg=config();cfg['excluded_categories']=['Електроніка']
+        groups=[group(journal('1',category_name='Електроніка',budget_id='1')),
+                group(journal('2',category_name='Електроніка',budget_id='manual')),
+                group(journal('3',category_name='Електроніка')),
+                group(journal('4',budget_id='1'))]
+        class Client:
+            def __init__(self):self.calls=[]
+            def all(self,path):
+                if path=='/transactions?type=all':return groups
+                if path=='/transaction-links':return []
+                if path=='/budgets':return [budget('1'),budget('2'),budget('3')]
+                return [{'attributes':{'currency_code':'UAH','start':'2026-11-01','end':'2026-11-30','amount':'1000'}}]
+            def request(self,method,path,data):self.calls.append((method,path,data))
+        client=Client();before=copy.deepcopy(groups)
+        with tempfile.TemporaryDirectory() as d:
+            result=synchronize(client,cfg,Path(d),date(2026,11,11))
+            self.assertEqual((1,1,1),(result['assigned'],result['category_exclusions'],result['manual_preserved']))
+            self.assertEqual(0,synchronize(client,cfg,Path(d),date(2026,11,11))['assigned'])
+        self.assertEqual(1,len(client.calls))
+        self.assertEqual([{'transaction_journal_id':'1','budget_id':None}],client.calls[0][2]['transactions'])
+        for old,new in zip(before,groups):
+            a,b=old['attributes']['transactions'][0],new['attributes']['transactions'][0]
+            self.assertEqual({k:v for k,v in a.items() if k!='budget_id'},{k:v for k,v in b.items() if k!='budget_id'})
+
+    def test_invalid_category_exclusion_is_rejected_before_api_access(self):
+        class Client:
+            def all(self,*args):raise AssertionError('Invalid configuration must not access the API')
+        for value in ('Електроніка',None,[''],[' Електроніка']):
+            cfg=config();cfg['excluded_categories']=value
+            with tempfile.TemporaryDirectory() as d, self.assertRaises(Deferred):
+                synchronize(Client(),cfg,Path(d),date(2026,11,11))
+
 
 if __name__=='__main__':unittest.main()
