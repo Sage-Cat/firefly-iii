@@ -15,7 +15,7 @@ from monobank_sync import Deferred, KYIV, amount, money, read_json, save_json
 
 
 def bucket_for(journal, config):
-    if journal["type"] != "withdrawal":
+    if journal["type"] != "withdrawal" or journal.get("category_name") in config.get("excluded_categories", []):
         return None
     if journal.get("category_name") == "Потребує уточнення":
         return "pending"
@@ -113,6 +113,10 @@ def current_limit(budget, limits, groups, today):
 
 def synchronize(client, config, state, today=None):
     today = today or datetime.now(KYIV).date()
+    excluded_categories = config.get("excluded_categories", [])
+    if (not isinstance(excluded_categories, list)
+            or not all(isinstance(value, str) and value.strip() == value and value for value in excluded_categories)):
+        raise Deferred("Excluded budget categories must be a list of exact category names")
     groups, budgets, links = client.all("/transactions?type=all"), client.all("/budgets"), client.all("/transaction-links")
     owned = {str(value) for value in config["budget_ids"].values()}
     by_id = {b["id"]: b for b in budgets}
@@ -122,16 +126,17 @@ def synchronize(client, config, state, today=None):
     limits = {identifier: client.all(f"/budgets/{identifier}/limits") for identifier in owned}
     save_json(state / (f"before-{time.time_ns()}.json"), {"budgets": budgets, "limits": limits, "transactions": groups})
     refunded = refunded_amounts(groups, links, config["refund_type_ids"])
-    assigned, exclusions, manual = 0, 0, 0
+    assigned, exclusions, manual, category_exclusions = 0, 0, 0, 0
     for group in groups:
         patches = []
         for j in group["attributes"]["transactions"]:
             bucket = bucket_for(j, config)
-            if not bucket or bucket == "pending" or bucket not in config["budget_ids"]:
+            excluded = j["type"] == "withdrawal" and j.get("category_name") in excluded_categories
+            if not excluded and (not bucket or bucket == "pending" or bucket not in config["budget_ids"]):
                 continue
             current = str(j.get("budget_id") or "")
             fully_refunded = refunded.get(str(j["transaction_journal_id"]), Decimal(0)) == money(j["amount"])
-            desired = "" if fully_refunded else config["budget_ids"][bucket]
+            desired = "" if excluded or fully_refunded else config["budget_ids"][bucket]
             if desired and not by_id[desired]["attributes"].get("active"):
                 continue
             if current and current not in owned:
@@ -141,6 +146,7 @@ def synchronize(client, config, state, today=None):
                 patches.append({"transaction_journal_id": j["transaction_journal_id"], "budget_id": desired or None})
                 j["budget_id"] = desired or None
                 assigned += 1
+                category_exclusions += bool(excluded)
             if fully_refunded:
                 exclusions += 1
         if patches:
@@ -165,6 +171,7 @@ def synchronize(client, config, state, today=None):
         created += 1
     result = {"finished_at": datetime.now(KYIV).isoformat(), "assigned": assigned,
               "fully_refunded_excluded": exclusions, "manual_preserved": manual, "limits_created": created}
+    result["category_exclusions"] = category_exclusions
     save_json(state / "last-success.json", result)
     return result
 
