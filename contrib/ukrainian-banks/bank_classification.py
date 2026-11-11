@@ -1,7 +1,8 @@
 """Apply confirmed bank metadata rules without creating financial movements.
 
 Private config.json schema: version=1, merchant_rules=[{prefix, category}],
-income_rules=[{destination_id OR description_prefix, category, tag (optional)}].
+income_rules=[{destination_id OR description_prefix, category, tag (optional)}],
+learning=bool (optional), learning_exclusions=[exact descriptions] (optional).
 Merchant rules only match withdrawals; income rules only match external deposits.
 Prefixes start at the first word and must end at a word boundary, ignoring case
 and repeated whitespace. No rules or account identifiers are built into this module.
@@ -50,8 +51,13 @@ def _text(value):
 
 def validate_config(config, assets):
     if (not isinstance(config, dict) or type(config.get("version")) is not int or config["version"] != 1
-            or set(config) - {"version", "merchant_rules", "income_rules"}):
+            or set(config) - {"version", "merchant_rules", "income_rules", "learning", "learning_exclusions"}):
         raise Deferred("Invalid confirmed bank classification configuration")
+    if "learning" in config and type(config["learning"]) is not bool:
+        raise Deferred("Category learning must be explicitly boolean")
+    if ("learning_exclusions" in config and (not isinstance(config["learning_exclusions"], list)
+            or not all(_text(value) for value in config["learning_exclusions"]))):
+        raise Deferred("Category learning exclusions must be exact nonempty descriptions")
     for name in ("merchant_rules", "income_rules"):
         rows = config.get(name, [])
         if not isinstance(rows, list):
@@ -82,14 +88,15 @@ def _refund_journals(link_types, links):
             for side in ("inward_id", "outward_id")}
 
 
-def _ordinary(journal, assets, refund_ids):
+def _ordinary(journal, assets, refund_ids, require_bank=True):
     from monobank_authorizations import managed_pending
     if note_object(journal.get('notes')).get('monobank_authorization_review'):
         return False
     kind = journal.get("type")
     provider = journal.get("internal_reference")
-    if (kind not in {"deposit", "withdrawal"} or provider not in PROVIDERS
-            or not str(journal.get("external_id", "")).startswith(provider + ":")
+    if (kind not in {"deposit", "withdrawal"}
+            or (require_bank and (provider not in PROVIDERS
+                                  or not str(journal.get("external_id", "")).startswith(provider + ":")))
             or not (settled(journal) or managed_pending(journal)) or positive_amount(journal) is None or date_of(journal) is None
             or str(journal.get("transaction_journal_id")) in refund_ids
             or journal.get("category_name") == "Повернення коштів"):
@@ -111,7 +118,7 @@ def _ordinary(journal, assets, refund_ids):
                 and journal.get("currency_id") and str(journal["currency_id"]) == str(assets[own].get("currency_id")))
 
 
-def _target(config, journal):
+def _target(config, journal, learned=()):
     if journal["type"] == "withdrawal":
         matches = [row for row in config.get("merchant_rules", []) if any(
             prefix_matches(journal.get(field), row["prefix"]) for field in ("description", "destination_name"))]
@@ -119,6 +126,10 @@ def _target(config, journal):
         matches = [row for row in config.get("income_rules", []) if (
             str(journal.get("destination_id")) == row["destination_id"] if "destination_id" in row
             else prefix_matches(journal.get("description"), row["description_prefix"]))]
+    # Explicit user rules take priority; learned rules match raw descriptions only.
+    if not matches:
+        matches = [row for row in learned if row["kind"] == journal["type"]
+                   and row["description"] == journal.get("description")]
     categories = {row["category"] for row in matches}
     if len(categories) > 1:
         return None, True
@@ -140,7 +151,7 @@ def _category_conflict(journal, target, categories):
     return not ((not category_id and not name) or (category_id and name == LEGACY_CATEGORY) or pending_default(journal))
 
 
-def plan(config, groups, accounts, categories, tags, link_types=(), links=()):
+def plan(config, groups, accounts, categories, tags, link_types=(), links=(), learned=()):
     """Return a pure metadata-only plan from a validated local ledger snapshot."""
     assets = {str(row["id"]): row["attributes"] for row in accounts}
     validate_config(config, assets)
@@ -150,7 +161,7 @@ def plan(config, groups, accounts, categories, tags, link_types=(), links=()):
         journal = record["journal"]
         if not _ordinary(journal, assets, refunds):
             continue
-        target, conflict = _target(config, journal)
+        target, conflict = _target(config, journal, learned)
         ambiguous += conflict
         if target is None:
             continue
@@ -213,11 +224,27 @@ def synchronize(client, state_dir, dry_run=False):
         raise PermissionError("Bank classification state must be a private directory")
     config = read_json(state_dir / "config.json")
     before = snapshot(client)
-    planned = plan(config, **before)
+    validate_config(config, {str(row["id"]): row["attributes"] for row in before["accounts"]})
+    learning_result = None
+    matchers = []
+    if config.get("learning"):
+        try:
+            from category_learning import learn, synchronize_rules
+            learned = learn(before, config)
+            save_json(state_dir / "learned-plan.json", learned)
+            learning_result = synchronize_rules(client, state_dir, learned, dry_run)
+            matchers = learning_result.pop("matchers")
+        except Exception as error:
+            # Financial imports already completed; a learning failure must not block them.
+            learning_result = {"error": type(error).__name__, "status": "deferred"}
+            save_json(state_dir / "learning-error.json", learning_result)
+    planned = plan(config, **before, learned=matchers)
     save_json(state_dir / "last-plan.json", planned)
     result = {"classified": 0, "tagged": 0, "categories_created": 0, "tags_created": 0,
               "category_conflicts": planned["category_conflicts"], "ambiguous_rules": planned["ambiguous_rules"],
               "stale_skipped": 0}
+    if learning_result is not None:
+        result["learning"] = learning_result
     if dry_run:
         return dict(result, planned_classifications=sum(u["category_change"] for u in planned["updates"]),
                     planned_tags=sum(bool(u["missing_tags"]) for u in planned["updates"]))
