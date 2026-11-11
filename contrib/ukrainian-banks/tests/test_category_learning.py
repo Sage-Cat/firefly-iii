@@ -375,6 +375,17 @@ class LearningTests(unittest.TestCase):
         self.assertNotEqual(learning._hash(learning._rule_shape(attributes)), learning._hash(learning._rule_shape(dict(attributes, description=html.unescape(attributes["description"])))))
         self.assertEqual(classification.synchronize(client, self.state)["learning"]["created"], 0)
 
+    def test_uppercase_brands_locations_and_service_prefixes_are_not_person_initials(self):
+        for text in ("Example GPT", "EXAMPLE CAFE", "BARBERSHOP, EXAMPLECITY", "A-SHOP, EXAMPLECITY",
+                     "PARKOVKA, EXAMPLECITY", "Купон ОВДП", "Парковка Приклад Парк", "Аптека Тестова Центральна",
+                     "ГОЛОВНЕ УПРАВЛІННЯ ПОДАТКІВ"):
+            with self.subTest(description=text):
+                self.assertIsNone(learning.description_reason(text))
+                self.assertEqual(len(self.policy(Client([confirmed(description=text)]))["candidates"]), 1)
+        for text in ("Exampleperson A.B.", "ExamplepersonA.B.", "Іваненко Іван Іванович", "ПРИКЛАДЕНКО ПРИКЛАД ПРИКЛАДОВИЧ"):
+            with self.subTest(description=text):
+                self.assertEqual(learning.description_reason(text), "person_or_sole_trader")
+
     def test_learning_config_rejects_non_boolean_and_invalid_exclusions(self):
         for config in (dict(configuration(), learning="yes"), dict(configuration(), learning_exclusions="ExampleGrocer"),
                        dict(configuration(), learning_exclusions=[""])):
