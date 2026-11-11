@@ -29,7 +29,20 @@ class Client(LedgerClient):
                            for identifier, name in (("101", "Продукти"), ("102", "Послуги"), ("103", "Інше"))]
         self.rule_groups, self.rules = [], []
         self.native_calls = []
-        self.rule_read_hook = self.native_before_put = self.native_after_post = self.native_after_put = None
+        self.rule_read_hook = self.native_before_put = self.native_after_post = self.native_after_put = self.native_before_post = None
+        self.hidden_orders = {}
+        self.canonical_create = False
+
+    def reset_native_group(self, group_id):
+        """Mirror native resetRuleTriggerOrder, including the hidden user_action."""
+        for old in self.rules:
+            if str(old["attributes"].get("rule_group_id")) != str(group_id):
+                continue
+            hidden = {"type": "user_action", "order": self.hidden_orders.get(str(old["id"]), 1), "active": True}
+            ordered = sorted(old["attributes"]["triggers"] + [hidden], key=lambda item: (item["order"], not item["active"], item["type"]))
+            for index, trigger in enumerate(ordered):
+                trigger["order"] = index + 1
+            self.hidden_orders[str(old["id"])] = hidden["order"]
 
     def all(self, path):
         if path in ("/rules", "/rule-groups"):
@@ -42,6 +55,15 @@ class Client(LedgerClient):
         self.native_calls.append((method, path, copy.deepcopy(data)))
         collection = self.rules if path.startswith("/rules") else self.rule_groups
         if method == "POST":
+            if path == "/rules":
+                assert options.get("rule_group_hash"), "Native creates require the conditional group fingerprint"
+                if self.native_before_post:
+                    self.native_before_post(self)
+                target_group = next(item for item in self.rule_groups if str(item["id"]) == str(data["rule_group_id"]))
+                if options["rule_group_hash"] != learning.group_fingerprint(target_group, {str(row["id"]): row for row in self.rules}):
+                    raise RuntimeError("HTTP 409: Rule group changed since it was read")
+                # Native store resets the group before it stores the new visible triggers.
+                self.reset_native_group(data["rule_group_id"])
             attributes = copy.deepcopy(data)
             if path == "/rules":
                 attributes["description"] = html.escape(attributes["description"], quote=True).replace("&#x27;", "&#039;")
@@ -55,6 +77,10 @@ class Client(LedgerClient):
                             item["prohibited"] = False
             created = {"id": identifier, "attributes": attributes}
             collection.append(created)
+            if path == "/rules":
+                self.hidden_orders[identifier] = 1
+                if self.canonical_create:
+                    self.reset_native_group(data["rule_group_id"])
             if self.native_after_post:
                 self.native_after_post(path, created)
             return {"data": copy.deepcopy(created)}
@@ -385,6 +411,122 @@ class LearningTests(unittest.TestCase):
         for text in ("Exampleperson A.B.", "ExamplepersonA.B.", "Іваненко Іван Іванович", "ПРИКЛАДЕНКО ПРИКЛАД ПРИКЛАДОВИЧ"):
             with self.subTest(description=text):
                 self.assertEqual(learning.description_reason(text), "person_or_sole_trader")
+
+    def test_native_hidden_trigger_reordering_is_checkpointed_only_after_own_create(self):
+        client = Client([confirmed("1", description="ExampleAlpha"), confirmed("2", description="ExampleBeta"), confirmed("3", description="ExampleGamma")])
+        result = classification.synchronize(client, self.state)
+        self.assertEqual((result["learning"]["created"], result["learning"]["native_reordered"]), (3, 2))
+        self.assertEqual([[item["order"] for item in row["attributes"]["triggers"]] for row in client.rules], [[1, 3, 4], [1, 3, 4], [1, 2, 3]])
+        state = json.loads((self.state / learning.MANIFEST).read_text())
+        for record in state["rules"].values():
+            row = next(row for row in client.rules if row["id"] == record["id"])
+            self.assertEqual(record["fingerprint"], learning._hash(learning._rule_shape(row["attributes"])))
+        count = len(client.native_calls)
+        repeated = classification.synchronize(client, self.state)
+        self.assertEqual((repeated["learning"]["owner_changed"], repeated["learning"]["created"]), (0, 0))
+        self.assertFalse(any(method != "GET" for method, _, _ in client.native_calls[count:]))
+
+    def test_exact_native_order_delta_without_own_creation_proof_is_not_adopted(self):
+        client = Client()
+        classification.synchronize(client, self.state)
+        for item, order in zip(client.rules[0]["attributes"]["triggers"], (1, 3, 4)):
+            item["order"] = order
+        count = len(client.native_calls)
+        result = classification.synchronize(client, self.state)
+        self.assertEqual(result["learning"]["owner_changed"], 1)
+        self.assertFalse(any(method != "GET" for method, _, _ in client.native_calls[count:]))
+
+    def test_canonical_creation_survives_native_rules_index_normalization(self):
+        client = Client([confirmed("1", description="ExampleAlpha"), confirmed("2", description="ExampleBeta")])
+        client.canonical_create = True
+        result = classification.synchronize(client, self.state)
+        self.assertEqual(result["learning"]["created"], 2)
+        self.assertEqual([[item["order"] for item in row["attributes"]["triggers"]] for row in client.rules], [[1, 3, 4], [1, 3, 4]])
+        before = copy.deepcopy(client.rules)
+        # Native web GET /rules invokes resetOrder -> resetRuleOrder on every group.
+        client.reset_native_group(client.rule_groups[0]["id"])
+        self.assertEqual(client.rules, before)
+        count = len(client.native_calls)
+        repeated = classification.synchronize(client, self.state)
+        self.assertEqual((repeated["learning"]["owner_changed"], repeated["learning"]["created"]), (0, 0))
+        self.assertFalse(any(method != "GET" for method, _, _ in client.native_calls[count:]))
+
+    def test_post_timeout_recovers_proven_native_reorder_before_owner_checks(self):
+        client = Client()
+        classification.synchronize(client, self.state)
+        client.groups.append(group(confirmed("2", description="ExampleOther")))
+        def timeout(path, row):
+            if path == "/rules":
+                raise RuntimeError("HTTP 503: synthetic lost native create response")
+        client.native_after_post = timeout
+        self.assertEqual(classification.synchronize(client, self.state)["learning"]["status"], "deferred")
+        self.assertEqual([item["order"] for item in client.rules[0]["attributes"]["triggers"]], [1, 3, 4])
+        client.native_after_post = None
+        count = len(client.native_calls)
+        recovered = classification.synchronize(client, self.state)
+        self.assertEqual((recovered["learning"]["native_reordered"], recovered["learning"]["owner_changed"], recovered["learning"]["adopted"]), (1, 0, 1))
+        self.assertFalse(any(method == "POST" for method, _, _ in client.native_calls[count:]))
+        self.assertEqual(len(client.rules), 2)
+
+    def test_untracked_member_or_owner_changed_member_blocks_new_group_creation(self):
+        for mode in ("untracked", "owner_changed", "edited", "reordered"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                state = Path(directory)
+                save_json(state / "config.json", configuration())
+                client = Client()
+                classification.synchronize(client, state)
+                if mode == "untracked":
+                    manual = copy.deepcopy(client.rules[0])
+                    manual["id"] = "9000"
+                    manual["attributes"]["title"] = "Owner manual member"
+                    client.rules.append(manual)
+                elif mode == "owner_changed":
+                    manifest = json.loads((state / learning.MANIFEST).read_text())
+                    next(iter(manifest["rules"].values()))["status"] = "owner_changed"
+                    save_json(state / learning.MANIFEST, manifest)
+                elif mode == "edited":
+                    client.rules[0]["attributes"]["actions"][0]["value"] = "Послуги"
+                else:
+                    client.rules[0]["attributes"]["triggers"][1]["order"] = 9
+                client.groups.append(group(confirmed("2", description="ExampleNew")))
+                client.groups.append(group(journal("3", description="ExampleGrocer")))
+                before = copy.deepcopy(client.rules)
+                count = len(client.native_calls)
+                result = classification.synchronize(client, state)
+                self.assertGreater(result["learning"]["owner_changed"], 0)
+                self.assertFalse(any(method == "POST" for method, _, _ in client.native_calls[count:]))
+                self.assertEqual(client.rules, before)
+                self.assertEqual(result["classified"], 1 if mode == "untracked" else 0)
+
+    def test_concurrent_group_member_change_rejects_post_before_native_reset(self):
+        client = Client()
+        classification.synchronize(client, self.state)
+        client.groups.append(group(confirmed("2", description="ExampleNew")))
+        old = copy.deepcopy(client.rules[0])
+        def owner_added(peer):
+            manual = copy.deepcopy(peer.rules[0])
+            manual["id"] = "9000"
+            manual["attributes"]["title"] = "Owner concurrently added member"
+            peer.rules.append(manual)
+        client.native_before_post = owner_added
+        result = classification.synchronize(client, self.state)
+        self.assertEqual(result["learning"]["owner_changed"], 1)
+        self.assertEqual(client.rules[0], old)
+        self.assertEqual(len(client.rules), 2)
+        self.assertEqual(result["learning"]["created"], 0)
+
+    def test_own_create_checkpoint_never_absorbs_other_owner_changes(self):
+        client = Client()
+        classification.synchronize(client, self.state)
+        client.groups.append(group(confirmed("2", description="ExampleOther")))
+        def edited(path, row):
+            if path == "/rules":
+                client.rules[0]["attributes"]["actions"][0]["value"] = "Послуги"
+        client.native_after_post = edited
+        result = classification.synchronize(client, self.state)
+        self.assertEqual(result["learning"]["native_reordered"], 0)
+        self.assertEqual(result["learning"]["owner_changed"], 1)
+        self.assertEqual(client.rules[0]["attributes"]["actions"][0]["value"], "Послуги")
 
     def test_learning_config_rejects_non_boolean_and_invalid_exclusions(self):
         for config in (dict(configuration(), learning="yes"), dict(configuration(), learning_exclusions="ExampleGrocer"),
