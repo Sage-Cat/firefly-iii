@@ -46,9 +46,14 @@ class SetCategory implements ActionInterface
 
     public function actOnArray(array $journal): bool
     {
+        $managed = \FireflyIII\Support\Reports\LearnedRuleGuard::applyCategory($this->action, $journal);
+        if (null !== $managed) {
+            return $managed;
+        }
+
         /** @var null|User $user */
-        $user            = User::find($journal['user_id']);
-        $search          = $this->action->getValue($journal);
+        $user   = User::find($journal['user_id']);
+        $search = $this->action->getValue($journal);
         if (null === $user) {
             Log::error(sprintf('Journal has no valid user ID so action SetCategory("%s") cannot be applied', $search), $journal);
             event(new RuleActionFailedOnArray($this->action, $journal, trans('rules.no_such_journal')));
@@ -57,9 +62,9 @@ class SetCategory implements ActionInterface
         }
 
         /** @var CategoryFactory $factory */
-        $factory         = app(CategoryFactory::class);
+        $factory = app(CategoryFactory::class);
         $factory->setUser($user);
-        $category        = $factory->findOrCreate(null, $search);
+        $category = $factory->findOrCreate(null, $search);
         if (null === $category) {
             Log::debug(sprintf(
                 'RuleAction SetCategory could not set category of journal #%d to "%s" because no such category exists.',
@@ -92,11 +97,11 @@ class SetCategory implements ActionInterface
         DB::table('category_transaction_journal')->where('transaction_journal_id', '=', $journal['transaction_journal_id'])->delete();
         DB::table('category_transaction_journal')->insert([
             'transaction_journal_id' => $journal['transaction_journal_id'],
-            'category_id'            => $category->id,
+            'category_id'            => $category->id
         ]);
 
         /** @var TransactionJournal $object */
-        $object          = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
+        $object = TransactionJournal::query()->where('user_id', $journal['user_id'])->find($journal['transaction_journal_id']);
         event(new TransactionGroupRequestsAuditLogEntry($this->action->rule, $object, 'set_category', $oldCategoryName, $category->name));
 
         return true;
