@@ -163,7 +163,7 @@ class Client:
         self._http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
     def _request(self, method, path, body=None, content_type=None, notes_hash=None, category_match=None,
-                 internal_card_hash=None, tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None, rule_hash=None):
+                 internal_card_hash=None, tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None, rule_hash=None, rule_group_hash=None):
         if not path.startswith("/") or path.startswith("//") or "://" in path:
             raise ValueError("Only relative API paths are supported")
         if ".." in path.split("/"):
@@ -209,11 +209,18 @@ class Client:
                     or any(value is not None for value in (notes_hash, category_match, internal_card_hash, tags_hash))):
                 raise ValueError("Invalid bank authorization precondition")
             headers["If-Match-Bank-Authorization"] = bank_authorization_hash
+        if rule_group_hash is not None:
+            if (not isinstance(rule_group_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", rule_group_hash)
+                    or method != "POST" or path != "/rules" or category_default
+                    or any(value is not None for value in (notes_hash, category_match, payment_hash,
+                        internal_card_hash, tags_hash, bank_authorization_hash, rule_hash))):
+                raise ValueError("Invalid learned rule group precondition")
+            headers["If-Match-Learned-Group"] = rule_group_hash
         if rule_hash is not None:
             if (not isinstance(rule_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", rule_hash)
                     or method != "PUT" or not re.fullmatch(r"/rules/[1-9][0-9]*", path)
                     or category_default or any(value is not None for value in (
-                        notes_hash, category_match, payment_hash, internal_card_hash, tags_hash, bank_authorization_hash))):
+                        notes_hash, category_match, payment_hash, internal_card_hash, tags_hash, bank_authorization_hash, rule_group_hash))):
                 raise ValueError("Invalid learned rule precondition")
             headers["If-Match-Learned-Rule"] = rule_hash
         request = urllib.request.Request(self.base + path, data=body, headers=headers, method=method)
@@ -230,11 +237,11 @@ class Client:
             raise RuntimeError(f"{method} {path}: HTTP {error.code}: {details}") from None
 
     def request(self, method, path, data=None, *, notes_hash=None, category_match=None, internal_card_hash=None,
-                tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None, rule_hash=None):
+                tags_hash=None, bank_authorization_hash=None, category_default=False, payment_hash=None, rule_hash=None, rule_group_hash=None):
         body = json.dumps(data, ensure_ascii=False).encode() if data is not None else None
         result = self._request(method, path, body, "application/json", notes_hash=notes_hash,
                                category_match=category_match, internal_card_hash=internal_card_hash, tags_hash=tags_hash,
-                               bank_authorization_hash=bank_authorization_hash, category_default=category_default, payment_hash=payment_hash, rule_hash=rule_hash)
+                               bank_authorization_hash=bank_authorization_hash, category_default=category_default, payment_hash=payment_hash, rule_hash=rule_hash, rule_group_hash=rule_group_hash)
         return json.loads(result) if result else None
 
     def all(self, path):

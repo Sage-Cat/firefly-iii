@@ -30,6 +30,18 @@ final class LearnedRuleUpdate
         ));
     }
 
+    public static function groupShape(RuleGroup $group, iterable $rules): array
+    {
+        $shape = ['group' => [], 'rules' => []];
+        foreach (['title', 'description', 'active', 'order'] as $key) {
+            $shape['group'][$key] = $group->{$key};
+        }
+        foreach ($rules as $rule) {
+            $shape['rules'][] = ['id' => (string) $rule->id, 'shape' => self::shape($rule)];
+        }
+        return $shape;
+    }
+
     public static function shape(Rule $rule): array
     {
         $shape = [];
@@ -66,6 +78,47 @@ final class LearnedRuleUpdate
             ];
         }
         return $shape;
+    }
+
+    /** Native creation reorders every rule in the group; bind the entire group before it writes. */
+    public static function store(Request $request, callable $store): JsonResponse
+    {
+        $expected = $request->header('If-Match-Learned-Group');
+        $groupId  = $request->input('rule_group_id');
+        $metadata = json_decode((string) $request->input('description'), true);
+        if (
+            !is_string($expected)
+            || !preg_match('/^[0-9a-f]{64}$/D', $expected)
+            || !is_scalar($groupId)
+            || !preg_match('/^[1-9][0-9]*$/D', (string) $groupId)
+            || array_key_exists('rule_group_title', $request->all())
+            || false !== $request->input('active')
+            || !is_array($metadata)
+            || 1 !== ($metadata['firefly_learned_category'] ?? null)
+        ) {
+            return response()->json(['message' => 'Conditional learned rule creation requires an inactive generated rule and group fingerprint.'], 422);
+        }
+        $owner = auth()->user()->user_group_id;
+        return DB::transaction(static function () use ($groupId, $owner, $expected, $store): JsonResponse {
+            $group = RuleGroup::query()->where('id', $groupId)->where('user_group_id', $owner)->lockForUpdate()->first();
+            if (null === $group) {
+                return response()->json(['message' => 'Rule group not found.'], 404);
+            }
+            $rules = Rule::query()->where('rule_group_id', $group->id)->orderBy('id')->lockForUpdate()->get();
+            foreach ($rules as $rule) {
+                foreach (['ruleTriggers', 'ruleActions'] as $relation) {
+                    $rule->setRelation($relation, $rule->{$relation}()->orderBy('order')->orderBy('id')->lockForUpdate()->get());
+                }
+            }
+            if (
+                !$group->active
+                || !str_starts_with((string) $group->description, 'category-learning:v1;')
+                || !hash_equals($expected, self::fingerprint(self::groupShape($group, $rules)))
+            ) {
+                return response()->json(['message' => 'Learned rule group changed since it was read.'], 409);
+            }
+            return $store();
+        });
     }
 
     public static function update(Request $request, Rule $rule): JsonResponse

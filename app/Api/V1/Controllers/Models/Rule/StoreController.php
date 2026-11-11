@@ -47,7 +47,7 @@ final class StoreController extends Controller
         parent::__construct();
         $this->middleware(function ($request, $next) {
             /** @var User $user */
-            $user                 = auth()->user();
+            $user = auth()->user();
 
             $this->ruleRepository = app(RuleRepositoryInterface::class);
             $this->ruleRepository->setUser($user);
@@ -64,14 +64,23 @@ final class StoreController extends Controller
      */
     public function store(StoreRequest $request): JsonResponse
     {
-        $rule        = $this->ruleRepository->store($request->getAll());
-        $manager     = $this->getManager();
+        if (null !== $request->header('If-Match-Learned-Group')) {
+            return \FireflyIII\Support\Reports\LearnedRuleUpdate::store($request, fn(): JsonResponse => $this->storeResponse($request));
+        }
+
+        return $this->storeResponse($request);
+    }
+
+    private function storeResponse(StoreRequest $request): JsonResponse
+    {
+        $rule    = $this->ruleRepository->store($request->getAll());
+        $manager = $this->getManager();
 
         /** @var RuleTransformer $transformer */
         $transformer = app(RuleTransformer::class);
         $transformer->setParameters($this->parameters);
 
-        $resource    = new Item($rule, $transformer, 'rules');
+        $resource = new Item($rule, $transformer, 'rules');
 
         return response()->json($manager->createData($resource)->toArray())->header('Content-Type', self::CONTENT_TYPE);
     }
