@@ -72,6 +72,40 @@ also confirms it; existing manual `Інше` without the tag stays final. Ordina
 bank settlement and partial amount/date/note updates retain provisional status.
 Unknown payments remain reviewable until classification is confirmed.
 
+## Learning confirmed categories
+
+Set `"learning": true` in the private `.state/bank-classification/config.json`
+alongside the configured classification rules. Each bank synchronization learns
+from confirmed history. A repeated external payment needs the exact full
+description and direction, with an unambiguous confirmed category. Explicit
+configured rules take precedence. Unknown defaults, opening balances, own
+transfers, refunds, generic descriptions, personal or sole-trader transfers,
+payment processors and descriptions containing native query syntax are excluded.
+Optional `learning_exclusions` contains additional exact descriptions. Different
+confirmed categories quarantine the entire normalized description family rather
+than selecting a majority.
+
+Managed native rules live in a separate group. Creation first persists an
+inactive rule and a private ownership manifest, then activates it using the
+atomic `If-Match-Learned-Rule` precondition. Creation also requires
+`If-Match-Learned-Group`, binding the complete group and its conditions/actions
+under locks before native reordering. Owner-controlled or untracked rules in
+the managed group prevent new automatic creation. Keep
+`.state/bank-classification/learned-rules.json` private and persistent for recovery
+without duplicate rules. Manual edits or disabling a managed rule stop automatic
+management of that rule. Existing manual categories and unrelated rules remain
+unchanged. Managed native rules check the exact journal description, direction
+and empty category again under a journal lock before setting a category.
+
+Bank imports do not run arbitrary native rules. Their metadata classifier uses
+the same learned catalog, preserving financial fields and owner choices.
+Learning failures are recorded privately and do not block financial imports.
+Choosing a category in the UI becomes training evidence on the next sync.
+
+The payment-review menu shows the exact queue count in an orange badge. It
+shares eligibility with the review page, refreshes on navigation, preserves
+keyboard focus and hides the indicator at zero or in anonymous mode.
+
 The native default path uses `If-Category-Default`, `If-Match-Category` and
 `If-Match-Payment`. The last header binds the caller's complete payment
 snapshot, including owner metadata and financial scope, to locked reads.
