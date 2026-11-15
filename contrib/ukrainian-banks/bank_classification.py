@@ -1,6 +1,6 @@
 """Apply confirmed bank metadata rules without creating financial movements.
 
-Private config.json schema: version=1, merchant_rules=[{prefix, category}],
+Private config.json schema: version=1, merchant_rules=[{prefix, category, tag (optional)}],
 income_rules=[{destination_id OR description_prefix, category, tag (optional)}],
 learning=bool (optional), learning_exclusions=[exact descriptions] (optional).
 Merchant rules only match withdrawals; income rules only match external deposits.
@@ -66,17 +66,17 @@ def validate_config(config, assets):
             if not isinstance(row, dict) or not _text(row.get("category")):
                 raise Deferred("Classification rule needs an approved category name")
             if name == "merchant_rules":
-                valid = set(row) == {"prefix", "category"} and _text(row.get("prefix"))
+                valid = set(row) - {"tag"} == {"prefix", "category"} and _text(row.get("prefix"))
             else:
                 selectors = set(row) & {"destination_id", "description_prefix"}
                 valid = (len(selectors) == 1 and not set(row) - {
                     "destination_id", "description_prefix", "category", "tag"}
                     and _text(row.get(next(iter(selectors))))) if selectors else False
-                if "tag" in row and not _text(row["tag"]):
-                    valid = False
                 if "destination_id" in row and (not _text(row["destination_id"]) or row["destination_id"] not in assets
                         or is_suspense(assets[row["destination_id"]])):
                     valid = False
+            if "tag" in row and not _text(row["tag"]):
+                valid = False
             if not valid:
                 raise Deferred("Invalid or unowned confirmed bank rule selector")
 
