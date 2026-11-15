@@ -1,3 +1,10 @@
 .state/
 __pycache__/
 *.py[cod]
+.env
+backups/
+# Bank statement exports and database dumps stay outside Git.
+*.sql
+*.xls
+*.xlsx
+*.csv
