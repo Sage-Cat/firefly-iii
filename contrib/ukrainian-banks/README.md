@@ -168,8 +168,8 @@ Set `"auto_classification": true` in the provider configuration to apply
 private, confirmed metadata rules after closing-balance verification and,
 where enabled, refund synchronization. Configure version 1 rules in
 `.state/bank-classification/config.json`, inside a private `0700` directory.
-`merchant_rules` contain a description or merchant `prefix` and a `category`;
-they match withdrawals only. `income_rules` select an owned `destination_id`
+`merchant_rules` contain a description or merchant `prefix`, a `category` and
+an optional `tag`; they match withdrawals only. `income_rules` select an owned `destination_id`
 or a `description_prefix`, plus a `category` and optional `tag`; they match
 external deposits only. Prefixes respect word boundaries and ignore case and
 repeated whitespace. Rules and account bindings belong to each installation.
