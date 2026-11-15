@@ -138,6 +138,16 @@ class ClassificationTests(unittest.TestCase):
         client = Client([journal(description="Bank payment 123", destination_name="Glovo*order")])
         self.assertEqual("Доставка їжі", self.plan(client)["updates"][0]["category"])
 
+    def test_tagged_merchant_rule_sets_category_and_tag_or_only_the_missing_tag(self):
+        rules = config()
+        rules["merchant_rules"].append({"prefix": "Payee card", "category": "Family", "tag": "Payee"})
+        client = Client([journal(description="Payee card"),
+                         journal("2", description="Payee card", category_id="5", category_name="Family")])
+        client.categories = [{"id": "5", "attributes": {"name": "Family"}}]
+        result = self.plan(client, rules)
+        self.assertEqual([("1", "Family", ["Payee"], True), ("2", "Family", ["Payee"], False)],
+                         [(u["journal_id"], u["category"], u["tags"], u["category_change"]) for u in result["updates"]])
+
     def test_unknowns_and_merchant_deposits_are_untouched(self):
         for row in [journal(description="Unknown merchant"), journal(kind="deposit", description="Glovo")]:
             self.assertEqual([], self.plan(Client([row]))["updates"])
@@ -362,6 +372,12 @@ class ClassificationTests(unittest.TestCase):
             with self.subTest(rule=rule):
                 with self.assertRaises(classification.Deferred):
                     self.plan(Client(), {"version": 1, "income_rules": [rule]})
+        for rule in [{"prefix": "Glovo", "category": "Доставка їжі", "tag": ""},
+                     {"prefix": "Glovo", "category": "Доставка їжі", "tag": " Padded"},
+                     {"prefix": "Glovo", "category": "Доставка їжі", "destination_id": "11"}]:
+            with self.subTest(rule=rule):
+                with self.assertRaises(classification.Deferred):
+                    self.plan(Client(), {"version": 1, "merchant_rules": [rule]})
 
     def test_private_state_and_snapshots_are_required(self):
         client = Client()
