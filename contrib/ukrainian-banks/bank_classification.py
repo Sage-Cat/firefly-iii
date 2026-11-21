@@ -1,9 +1,12 @@
 """Apply confirmed bank metadata rules without creating financial movements.
 
-Private config.json schema: version=1, merchant_rules=[{prefix, category, tag (optional)}],
+Private config.json schema: version=1, merchant_rules=[{prefix, category, tag (optional),
+amount_from (optional), amount_below (optional)}],
 income_rules=[{destination_id OR description_prefix, category, tag (optional)}],
 learning=bool (optional), learning_exclusions=[exact descriptions] (optional).
 Merchant rules only match withdrawals; income rules only match external deposits.
+Amount bounds are decimal strings compared with the payment amount in its own currency:
+amount_from is inclusive and amount_below is exclusive.
 Prefixes start at the first word and must end at a word boundary, ignoring case
 and repeated whitespace. No rules or account identifiers are built into this module.
 The caller opts in and holds the common bank synchronization lock.
@@ -11,8 +14,10 @@ The caller opts in and holds the common bank synchronization lock.
 
 import copy
 import os
+import re
 import stat
 import time
+from decimal import Decimal
 from pathlib import Path
 
 from bank_refunds import date_of, indexed_journals, positive_amount, settled
@@ -49,6 +54,21 @@ def _text(value):
     return isinstance(value, str) and bool(value.strip()) and value == value.strip()
 
 
+def _bound(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", value):
+        return None
+    value = Decimal(value)
+    return value if value > 0 else None
+
+
+def _amount_fits(row, journal):
+    if "amount_from" not in row and "amount_below" not in row:
+        return True
+    amount = positive_amount(journal)
+    return bool(amount is not None and ("amount_from" not in row or amount >= Decimal(row["amount_from"]))
+                and ("amount_below" not in row or amount < Decimal(row["amount_below"])))
+
+
 def validate_config(config, assets):
     if (not isinstance(config, dict) or type(config.get("version")) is not int or config["version"] != 1
             or set(config) - {"version", "merchant_rules", "income_rules", "learning", "learning_exclusions"}):
@@ -66,7 +86,10 @@ def validate_config(config, assets):
             if not isinstance(row, dict) or not _text(row.get("category")):
                 raise Deferred("Classification rule needs an approved category name")
             if name == "merchant_rules":
-                valid = set(row) - {"tag"} == {"prefix", "category"} and _text(row.get("prefix"))
+                bounds = [_bound(row[key]) for key in ("amount_from", "amount_below") if key in row]
+                valid = (set(row) - {"tag", "amount_from", "amount_below"} == {"prefix", "category"}
+                         and _text(row.get("prefix")) and None not in bounds
+                         and (len(bounds) < 2 or bounds[0] < bounds[1]))
             else:
                 selectors = set(row) & {"destination_id", "description_prefix"}
                 valid = (len(selectors) == 1 and not set(row) - {
@@ -120,7 +143,7 @@ def _ordinary(journal, assets, refund_ids, require_bank=True):
 
 def _target(config, journal, learned=()):
     if journal["type"] == "withdrawal":
-        matches = [row for row in config.get("merchant_rules", []) if any(
+        matches = [row for row in config.get("merchant_rules", []) if _amount_fits(row, journal) and any(
             prefix_matches(journal.get(field), row["prefix"]) for field in ("description", "destination_name"))]
     else:
         matches = [row for row in config.get("income_rules", []) if (
