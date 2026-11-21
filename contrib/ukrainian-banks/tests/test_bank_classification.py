@@ -148,6 +148,21 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual([("1", "Family", ["Payee"], True), ("2", "Family", ["Payee"], False)],
                          [(u["journal_id"], u["category"], u["tags"], u["category_change"]) for u in result["updates"]])
 
+    def test_amount_bounds_split_one_merchant_between_categories(self):
+        rules = config()
+        rules["merchant_rules"] += [{"prefix": "Station", "category": "Cafe", "amount_below": "1500"},
+                                    {"prefix": "Station", "category": "Fuel", "amount_from": "1500"},
+                                    {"prefix": "Kiosk", "category": "Snacks", "amount_from": "10", "amount_below": "20.50"}]
+        cases = [("Station", "270.00", "Cafe"), ("Station", "1499.99", "Cafe"), ("Station", "1500.00", "Fuel"),
+                 ("Station", "4834.00", "Fuel"), ("Kiosk", "10.00", "Snacks"), ("Kiosk", "20.49", "Snacks")]
+        for identifier, (text, amount, category) in enumerate(cases, 1):
+            with self.subTest(text=text, amount=amount):
+                client = Client([journal(str(identifier), description=text, amount=amount)])
+                self.assertEqual(category, self.plan(client, rules)["updates"][0]["category"])
+        for text, amount in [("Kiosk", "9.99"), ("Kiosk", "20.50")]:
+            with self.subTest(text=text, amount=amount):
+                self.assertEqual([], self.plan(Client([journal(description=text, amount=amount)]), rules)["updates"])
+
     def test_unknowns_and_merchant_deposits_are_untouched(self):
         for row in [journal(description="Unknown merchant"), journal(kind="deposit", description="Glovo")]:
             self.assertEqual([], self.plan(Client([row]))["updates"])
@@ -374,7 +389,11 @@ class ClassificationTests(unittest.TestCase):
                     self.plan(Client(), {"version": 1, "income_rules": [rule]})
         for rule in [{"prefix": "Glovo", "category": "Доставка їжі", "tag": ""},
                      {"prefix": "Glovo", "category": "Доставка їжі", "tag": " Padded"},
-                     {"prefix": "Glovo", "category": "Доставка їжі", "destination_id": "11"}]:
+                     {"prefix": "Glovo", "category": "Доставка їжі", "destination_id": "11"},
+                     *({"prefix": "Glovo", "category": "Доставка їжі", "amount_below": value}
+                       for value in ("", "0", "0.00", "-1", "1,5", " 15", "1.001", 1500, None)),
+                     {"prefix": "Glovo", "category": "Доставка їжі", "amount_from": "1500", "amount_below": "1500"},
+                     {"prefix": "Glovo", "category": "Доставка їжі", "amount_from": "2000", "amount_below": "1500"}]:
             with self.subTest(rule=rule):
                 with self.assertRaises(classification.Deferred):
                     self.plan(Client(), {"version": 1, "merchant_rules": [rule]})
