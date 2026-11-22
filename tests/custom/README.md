@@ -23,8 +23,8 @@ mobile and high-DPI resizing. Screenshots and measurements go to the ignored
 Use `--chrome /path/to/chrome` for another Chrome installation.
 
 The checks cover reporting request boundaries, dated conversion, expense
-and budget presentation, profit periods, per-currency dashboard cards, and
-daily net worth valuation. The dashboard JavaScript check executes the
+and budget presentation, profit periods, per-currency dashboard cards,
+daily net worth valuation, and investment positions. The dashboard JavaScript check executes the
 native source module without network or DOM access. PHP fixtures replace
 selected collaborators and do not require a database or user state.
 

@@ -38,6 +38,18 @@ This fork adds a Ukrainian finance reporting profile while retaining the upstrea
 - A compact, accessible payment-review page with the existing explicit category and transfer decisions preserved.
 - A single expense-chart tax bar for payees whose selected-period charges and linked refunds use only the exact confirmed tax categories; mixed and unknown payees remain separate.
 - Narrow Ukrainian interface overrides shared by native PHP translations and generated frontend JSON.
+- An investments page for asset accounts marked in their notes, with NBU-valued positions, allocation against target shares, value history, period coupons and transfers, and a labelled simple bond-yield estimate.
+
+An account joins the investments page through a versioned block in its notes:
+
+```text
+<!-- firefly-investment:v1
+{"version":1,"kind":"bond","maturity":"2027-12-15","yield_to_maturity":"3.2","purchases":[{"day":"2026-06-22","amount":"2000.00","currency":"EUR"}]}
+-->
+```
+
+`kind` is `bond`, `broker`, `crypto` or `other`; `target_share`, `income_category` (coupon category), `yield_basis` and `source` are optional.
+Positions follow the net-worth valuation rules. Market prices, nominal values and coupon schedules are not loaded or inferred.
 
 Optional [Ukrainian bank import tools](contrib/ukrainian-banks/README.md) run separately from the application.
 The [reporting checks](tests/custom/README.md) describe the synthetic test suite and frontend build.
