@@ -929,6 +929,9 @@ Route::group(
 Route::get('reports/profit', [\FireflyIII\Http\Controllers\ProfitReportController::class, 'index'])
     ->middleware('user-full-auth')->name('reports.profit');
 
+Route::get('reports/investments', [\FireflyIII\Http\Controllers\InvestmentReportController::class, 'index'])
+    ->middleware('user-full-auth')->name('reports.investments');
+
 Route::get('transactions/review', [\FireflyIII\Http\Controllers\PaymentReviewController::class, 'index'])
     ->middleware('user-full-auth')->name('transactions.review');
 Route::post('transactions/review/{journalId}', [\FireflyIII\Http\Controllers\PaymentReviewController::class, 'store'])

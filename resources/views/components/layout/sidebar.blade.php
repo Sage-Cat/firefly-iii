@@ -99,6 +99,7 @@
     @include('reports.payment-review-sidebar')
     <li class="nav-header text-uppercase">Статистика</li>
     @include('reports.profit-sidebar')
+    @include('reports.investments-sidebar')
     @include('components.layout.workspace-navigation')
     <li class="nav-header text-uppercase">{{ __('firefly.others') }}</li>
 
