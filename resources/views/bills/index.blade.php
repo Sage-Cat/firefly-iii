@@ -1,15 +1,26 @@
 @extends('layout.v3.session')
 @section('content')
     @php($subscriptionOverview = \FireflyIII\Support\Reports\SubscriptionOverview::forUser(auth()->user()))
+    @php($subscriptionShowEnded = request()->boolean('ended'))
+    @php($subscriptionList = \FireflyIII\Support\Reports\SubscriptionOverview::current($bills, \FireflyIII\Support\Reports\ReportingCurrency::today()->format('Y-m-d')))
     <div class="row g-3 align-items-start">
         <div class="col-xl-8 subscription-list-column">
-            @include('bills.control-queue')
+            @include('bills.control-queue', ['bills' => $subscriptionList['bills']])
             @if(0 === $total)
                 @php($shownDemo = true)
                 <x-empty-page :route="route('subscriptions.create')" type="bills" object-type="default" />
             @endif
             @if($total > 0)
-                <x-lists.subscriptions :bills="$bills" :sums="$sums" :totals="$totals" :today="$today" />
+                @if($subscriptionShowEnded || $subscriptionList['shown'] > 0)
+                    <x-lists.subscriptions :bills="$subscriptionShowEnded ? $bills : $subscriptionList['bills']" :sums="$sums" :totals="$totals" :today="$today" />
+                @else
+                    <div class="card mb-2"><div class="card-body text-muted">Чинних підписок немає.</div></div>
+                @endif
+                @if($subscriptionList['ended'] > 0)
+                    <p class="small mb-3">
+                        <a href="{{ route('subscriptions.index', $subscriptionShowEnded ? [] : ['ended' => 1]) }}">{{ $subscriptionShowEnded ? 'Сховати' : 'Показати' }} завершені підписки ({{ $subscriptionList['ended'] }})</a>
+                    </p>
+                @endif
             @endif
         </div>
         <div class="col-xl-4">@include('bills.subscription-overview')</div>

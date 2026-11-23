@@ -14,11 +14,15 @@ final class SubscriptionOverview
     /** Monthly equivalents use original amounts, preserving the unrounded UAH bridge. */
     public static function build(array $bills, array $quotes, string $day): array
     {
+        $date = \DateTimeImmutable::createFromFormat('!d.m.Y', $day);
+        if (false === $date || $date->format('d.m.Y') !== $day) {
+            throw new RuntimeException('Некоректна дата оцінки підписок.');
+        }
         $rows  = [];
         $seen  = [];
         $total = '0';
         foreach ($bills as $bill) {
-            if (!($bill['active'] ?? false)) {
+            if (self::ended($bill, $date->format('Y-m-d'))) {
                 continue;
             }
             $id = (string) ($bill['id'] ?? '');
@@ -73,6 +77,37 @@ final class SubscriptionOverview
         return ['rows' => $rows, 'uah' => $uah, 'eur' => $eur, 'count' => count($rows), 'day' => $day, 'error' => null];
     }
 
+    /** A subscription has ended when it is switched off or its end date has passed. */
+    public static function ended(array $bill, string $day): bool
+    {
+        $end = $bill['end_date'] ?? null;
+
+        return !($bill['active'] ?? false)
+            || (is_string($end) && 1 === preg_match('/^\d{4}-\d{2}-\d{2}/', $end) && substr($end, 0, 10) < $day);
+    }
+
+    /** Native list groups without ended subscriptions; the count lets the page offer them on request. */
+    public static function current(array $groups, string $day): array
+    {
+        $ended = 0;
+        $shown = 0;
+        foreach ($groups as $key => $group) {
+            $kept = [];
+            foreach ($group['bills'] as $bill) {
+                if (self::ended($bill, $day)) {
+                    ++$ended;
+
+                    continue;
+                }
+                $kept[] = $bill;
+            }
+            $groups[$key]['bills'] = $kept;
+            $shown += count($kept);
+        }
+
+        return ['bills' => $groups, 'shown' => $shown, 'ended' => $ended];
+    }
+
     public static function forUser($user): array
     {
         $day = ReportingCurrency::today()->format('d.m.Y');
@@ -93,7 +128,8 @@ final class SubscriptionOverview
                     'maximum'   => (string) $bill->amount_max,
                     'currency'  => $bill->transactionCurrency?->code,
                     'frequency' => $bill->repeat_freq,
-                    'skip'      => $bill->skip
+                    'skip'      => $bill->skip,
+                    'end_date'  => ($bill->end_date ?? null)?->format('Y-m-d'),
                 ];
             }
 
