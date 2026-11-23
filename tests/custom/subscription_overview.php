@@ -179,6 +179,36 @@ namespace {
     rejects(static fn() => SubscriptionOverview::build([bill('1', '1'), bill('1', '2')], $quotes, '15.07.2026'));
     rejects(static fn() => SubscriptionOverview::build([bill('1', '1', 'EUR')], ['EUR' => '0'], '15.07.2026'));
     rejects(static fn() => SubscriptionOverview::build([bill('1', '1')], [], '15.07.2026'));
+    rejects(static fn() => SubscriptionOverview::build([bill('1', '1')], $quotes, '2026-07-15'));
+    $ending = [
+        array_replace(bill('1', '100'), ['end_date' => '2026-07-14T00:00:00+03:00']),
+        array_replace(bill('2', '200'), ['end_date' => '2026-07-15T00:00:00+03:00']),
+        array_replace(bill('3', '300'), ['end_date' => '2026-12-31']),
+        bill('4', '400', 'UAH', 'monthly', 0, false)
+    ];
+    $current = SubscriptionOverview::build($ending, $quotes, '15.07.2026');
+    check(
+        $current['count'] === 2 && $current['uah'] === '500.00' && array_column($current['rows'], 'id') === ['3', '2'],
+        'Ended subscriptions must leave the forecast while the last day still counts.'
+    );
+    $groups = [
+        0 => ['object_group_id' => 0, 'object_group_title' => 'Default', 'bills' => []],
+        3 => ['object_group_id' => 7, 'object_group_title' => 'Ended only', 'bills' => [array_replace(bill('5', '1'), ['end_date' => '2026-07-01T00:00:00+03:00'])]],
+        5 => ['object_group_id' => 8, 'object_group_title' => 'Mixed', 'bills' => $ending]
+    ];
+    $list = SubscriptionOverview::current($groups, '2026-07-15');
+    check($list['shown'] === 2 && $list['ended'] === 3, 'Inactive and expired subscriptions must be counted as ended.');
+    check(
+        array_keys($list['bills']) === [0, 3, 5]
+        && $list['bills'][3]['bills'] === []
+        && array_column($list['bills'][5]['bills'], 'id') === ['2', '3']
+        && $list['bills'][5]['object_group_title'] === 'Mixed',
+        'Group order and remaining native rows must stay unchanged.'
+    );
+    check(
+        SubscriptionOverview::current([0 => ['bills' => [array_replace(bill('6', '1'), ['end_date' => 'unknown'])]]], '2026-07-15')['shown'] === 1,
+        'An unreadable end date must not hide an active subscription.'
+    );
     Bill::$rows = [];
     foreach ([1, 2] as $group) {
         Bill::$rows[] = (object) [
@@ -193,8 +223,23 @@ namespace {
             'skip'                => 0
         ];
     }
+    Bill::$rows[] = (object) [
+        'id'                  => 3,
+        'user_group_id'       => 1,
+        'active'              => true,
+        'name'                => 'Expired',
+        'amount_min'          => '10',
+        'amount_max'          => '10',
+        'transactionCurrency' => (object) ['code' => 'USD'],
+        'repeat_freq'         => 'monthly',
+        'skip'                => 0,
+        'end_date'            => new DateTimeImmutable('2026-07-14')
+    ];
     $owned = SubscriptionOverview::forUser((object) ['user_group_id' => 1]);
-    check($owned['error'] === null && $owned['count'] === 1 && $owned['uah'] === '450.00', 'The native query must scope both owner group and active state.');
+    check(
+        $owned['error'] === null && $owned['count'] === 1 && $owned['uah'] === '450.00',
+        'The native query must scope owner group, active state and end date.'
+    );
     $patched = file_get_contents(dirname(__DIR__, 2) . '/resources/views/components/lists/subscriptions.blade.php');
     check(
         !str_contains($patched, '@if(array_key_exists($objectGroupOrder, $sums))') && !str_contains($patched, '@if(count($totals) > 0)'),
@@ -220,6 +265,13 @@ namespace {
     check(
         str_contains($view, 'col-xl-8') && str_contains($view, 'col-xl-4') && str_contains($view, '<x-lists.subscriptions'),
         'The original list must remain left of the new summary.'
+    );
+    check(
+        str_contains($view, 'SubscriptionOverview::current(')
+        && str_contains($view, "['bills' => \$subscriptionList['bills']]")
+        && str_contains($view, "request()->boolean('ended')")
+        && str_contains($view, 'завершені підписки'),
+        'Ended subscriptions must stay hidden from the list and queue unless requested.'
     );
     check(
         str_contains($view, "type: 'doughnut'")
