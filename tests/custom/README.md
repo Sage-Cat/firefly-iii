@@ -117,7 +117,8 @@ updates, including stale requests and preservation of financial fields.
 
 `subscription_overview.php` checks the active-subscription monthly forecast,
 UAH/EUR conversion, deterministic cent allocation, empty/error states and
-owner scope. It also checks the native list, controls and bounded doughnut
+owner scope. Ended subscriptions (inactive or past their end date) leave the
+forecast and the list unless the page is opened with `?ended=1`. It also checks the native list, controls and bounded doughnut
 chart markup. These source checks do not replace a browser layout check.
 With `FIREFLY_TEST_APP_ROOT` set, only Composer dependencies and application
 bootstrap come from that installation; checked source and views stay in this
